@@ -318,7 +318,7 @@ function system.get_primary_selection() end
 function system.set_primary_selection(text) end
 
 ---
----Get the process id of lite-xl itself.
+---Get the process id of max-xl itself.
 ---
 ---@return integer
 function system.get_process_id() end
@@ -370,7 +370,7 @@ function system.fuzzy_match(haystack, needle, file) end
 function system.set_window_opacity(window, opacity) end
 
 ---
----Loads a lua native module using the default Lua API or lite-xl native plugin API.
+---Loads a lua native module using the default Lua API or max-xl native plugin API.
 ---Note: Never use this function directly.
 ---
 ---@param name string the name of the module

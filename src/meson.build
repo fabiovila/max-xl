@@ -5,6 +5,7 @@ lite_sources = [
     'api/regex.c',
     'api/system.c',
     'api/process.c',
+    'api/pty.c',
     'api/utf8.c',
     'arena_allocator.c',
     'custom_events.c',
@@ -19,6 +20,7 @@ lite_sources = [
 #===============================================================================
 libm = cc.find_library('m', required : false)
 libdl = cc.find_library('dl', required : false)
+libutil = cc.find_library('util', required : false)
 
 default_fallback_options = ['warning_level=0', 'werror=false']
 
@@ -64,6 +66,9 @@ freetype_dep = dependency('freetype2', fallback: ['freetype2', 'freetype_dep'],
 sdl_dep = dependency('sdl3', static: true)
 
 lite_deps = [lua_dep, sdl_dep, freetype_dep, pcre2_dep, libm, libdl]
+if libutil.found()
+    lite_deps += libutil
+endif
 
 lite_sources += 'api/dirmonitor.c'
 # dirmonitor backend
@@ -121,7 +126,7 @@ endif
 
 lite_includes += include_directories('.')
 
-executable('lite-xl',
+executable('max-xl',
     lite_sources + lite_rc,
     include_directories: lite_includes,
     dependencies: lite_deps,

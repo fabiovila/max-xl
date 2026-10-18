@@ -55,11 +55,32 @@ local function update_recents_project(action, dir_path_abs)
 end
 
 
+-- per-project `.max-xl/` directory, equivalent to VSCode's `.vscode/`.
+-- When a project is added (startup, session restore, opening a folder),
+-- `<project>/.max-xl/init.lua` is executed with the project path as its
+-- argument, if present. Same trust model as the root `.lite_project.lua`:
+-- only projects you trust should contain this file.
+local function load_maxxl_dir(project)
+  if not project or not project.path then return end
+  local file = project.path .. PATHSEP .. ".max-xl" .. PATHSEP .. "init.lua"
+  local info = system.get_file_info(file)
+  if not info or info.type ~= "file" then return end
+  local chunk, err = loadfile(file)
+  if not chunk then
+    core.error("Error loading %q: %s", file, err)
+    return
+  end
+  core.log("Loading .max-xl config %q", file)
+  core.try(chunk, project.path)
+end
+
+
 function core.add_project(project)
   project = type(project) == "string" and Project(common.normalize_volume(project)) or project
   table.insert(core.projects, project)
   update_recents_project("add", project.path)
   core.redraw = true
+  load_maxxl_dir(project)
   return project
 end
 
@@ -147,9 +168,9 @@ local style = require "core.style"
 -- style.font = renderer.font.load(DATADIR .. "/fonts/FiraSans-Regular.ttf", 14 * SCALE)
 -- style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 14 * SCALE)
 --
--- DATADIR is the location of the installed Lite XL Lua code, default color
+-- DATADIR is the location of the installed Max XL Lua code, default color
 -- schemes and fonts.
--- USERDIR is the location of the Lite XL configuration directory.
+-- USERDIR is the location of the Max XL configuration directory.
 --
 -- font names used by lite:
 -- style.font          : user interface
@@ -261,7 +282,7 @@ end
 
 function core.init()
   core.log_items = {}
-  core.log_quiet("Lite XL version %s - mod-version %s", VERSION, MOD_VERSION_STRING)
+  core.log_quiet("Max XL version %s - mod-version %s", VERSION, MOD_VERSION_STRING)
 
   command = require "core.command"
   keymap = require "core.keymap"
@@ -919,7 +940,7 @@ end
 
 
 function core.compose_window_title(title)
-  return (title == "" or title == nil) and "Lite XL" or title .. " - Lite XL"
+  return (title == "" or title == nil) and "Max XL" or title .. " - Max XL"
 end
 
 

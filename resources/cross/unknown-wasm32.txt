@@ -41,11 +41,11 @@ exported_js_values = '[]'
 # Extra link options passed to the linker.
 extra_link_options = []
 
-# In order to run Lite XL, you will also need to bundle the /data directory.
+# In order to run Max XL, you will also need to bundle the /data directory.
 # The following option is added to the linking process to bundle the /data directory.
 # If you want to do this manually or the automatic bundling process does not work,
 # comment out the following line.
-bundle_paths = ['--preload-file', '../data@/usr/share/lite-xl/']
+bundle_paths = ['--preload-file', '../data@/usr/share/max-xl/']
 
 
 [binaries]

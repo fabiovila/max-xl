@@ -2,7 +2,7 @@
 set -e
 
 if [ ! -e "src/api/api.h" ]; then
-  echo "Please run this script from the root directory of Lite XL."
+  echo "Please run this script from the root directory of Max XL."
   exit 1
 fi
 
@@ -67,30 +67,30 @@ setup_appimagetool() {
 generate_appimage() {
   [[ ! -e $BUILD_DIR ]] && scripts/build.sh $@
 
-  if [ -e LiteXL.AppDir ]; then
-    rm -rf LiteXL.AppDir
+  if [ -e MaxXL.AppDir ]; then
+    rm -rf MaxXL.AppDir
   fi
 
-  echo "Creating LiteXL.AppDir..."
+  echo "Creating MaxXL.AppDir..."
 
-  DESTDIR="$(realpath LiteXL.AppDir)" meson install -C ${BUILD_DIR}
+  DESTDIR="$(realpath MaxXL.AppDir)" meson install -C ${BUILD_DIR}
 
-  cp resources/icons/lite-xl.svg LiteXL.AppDir/
-  cp resources/linux/com.lite_xl.LiteXL.desktop LiteXL.AppDir/
+  cp resources/icons/max-xl.svg MaxXL.AppDir/
+  cp resources/linux/com.max_xl.MaxXL.desktop MaxXL.AppDir/
 
-  # https://github.com/lite-xl/lite-xl/issues/1912
-  mkdir -p ./LiteXL.AppDir/usr/share/../bin
-  mv ./LiteXL.AppDir/lite-xl ./LiteXL.AppDir/usr/bin
-  mv ./LiteXL.AppDir/data ./LiteXL.AppDir/usr/share/lite-xl
-  rm -rf ./LiteXL.AppDir/lib64 ./LiteXL.AppDir/include
+  # work around the AppImage layout: keep the binary out of usr/share
+  mkdir -p ./MaxXL.AppDir/usr/share/../bin
+  mv ./MaxXL.AppDir/max-xl ./MaxXL.AppDir/usr/bin
+  mv ./MaxXL.AppDir/data ./MaxXL.AppDir/usr/share/max-xl
+  rm -rf ./MaxXL.AppDir/lib64 ./MaxXL.AppDir/include
 
   echo "Creating AppRun..."
-	cat >> LiteXL.AppDir/AppRun <<- 'EOF'
+	cat >> MaxXL.AppDir/AppRun <<- 'EOF'
 	#!/bin/sh
 	CURRENTDIR="$(dirname "$(readlink -f "$0")")"
-	exec "$CURRENTDIR/usr/bin/lite-xl" "$@"
+	exec "$CURRENTDIR/usr/bin/max-xl" "$@"
 	EOF
-  chmod +x LiteXL.AppDir/AppRun
+  chmod +x MaxXL.AppDir/AppRun
 
   echo "Generating AppImage..."
   local version=""
@@ -98,8 +98,8 @@ generate_appimage() {
     version="-$VERSION"
   fi
 
-  APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool LiteXL.AppDir LiteXL${version}-${ARCH}-linux.AppImage
-  rm -rf LiteXL.AppDir
+  APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool MaxXL.AppDir MaxXL${version}-${ARCH}-linux.AppImage
+  rm -rf MaxXL.AppDir
 }
 
 setup_appimagetool

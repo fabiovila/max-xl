@@ -848,7 +848,7 @@ static int f_get_clipboard(lua_State *L) {
   if (!text) { return 0; }
 #ifdef _WIN32
   // on windows, text-based clipboard formats must terminate with \r\n
-  // we need to convert it to \n for Lite XL to read them properly
+  // we need to convert it to \n for Max XL to read them properly
   // https://learn.microsoft.com/en-us/windows/win32/dataxchg/standard-clipboard-formats
   luaL_gsub(L, text, "\r\n", "\n");
 #else

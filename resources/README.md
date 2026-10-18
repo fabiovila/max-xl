@@ -4,19 +4,20 @@ This folder contains resources that is used for building or packaging the projec
 
 ### Build
 
-- `cross/*.txt`: Meson [cross files][1] for cross-compiling lite-xl on other platforms.
+- `cross/*.txt`: Meson [cross files][1] for cross-compiling max-xl on other platforms.
 
 ### Packaging
 
-- `release-notes.md`: lite-xl release note template, used with `envsubst`.
-- `icons/icon.{icns,ico,inl,rc,svg}`: lite-xl icon in various formats.
-- `linux/com.lite_xl.LiteXL.appdata.xml`: AppStream metadata.
-- `linux/com.lite_xl.LiteXL.desktop`: Desktop file for Linux desktops.
+- `release-notes.md`: max-xl release note template, used with `envsubst`.
+- `icons/icon.{icns,ico,inl,rc}`: max-xl icon in various formats.
+- `icons/max-xl.svg`: max-xl icon in SVG format.
+- `linux/com.max_xl.MaxXL.metainfo.xml.in`: AppStream metadata template.
+- `linux/com.max_xl.MaxXL.desktop`: Desktop file for Linux desktops.
 - `macos/background.png`: Background image for packaging macOS DMGs.
 - `macos/background@2x.png`: HiDPI image for packaging macOS DMGs.
 - `macos/background.tiff`: TIFF image for packaging macOS DMGs.
 - `macos/Info.plist.in`: Template for generating `info.plist` on macOS. See `macos/macos-retina-display.md` for details.
-- `macos/lite-xl-dmg.py`: Configuration options for dmgbuild for packaging macOS DMGs.
+- `macos/max-xl-dmg.py`: Configuration options for dmgbuild for packaging macOS DMGs.
 
 ### Development
 

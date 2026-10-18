@@ -14,7 +14,7 @@ local Dirwatch = require "core.dirwatch"
 
 config.plugins.treeview = common.merge({
   -- Default treeview width
-  size = 200 * SCALE,
+  size = 170 * SCALE,
   highlight_focused_file = true,
   expand_dirs_to_focused_file = false,
   scroll_to_focused_file = false,
@@ -361,6 +361,22 @@ function TreeView:draw_tooltip()
 end
 
 
+-- Theme key: `style.treeview = { open = {...} }` tints files that are
+-- currently open in the editor. Falls back to the accent color.
+local function open_file_color()
+  return (style.treeview or {}).open or style.accent
+end
+
+
+local function is_open_file(item)
+  if item.type ~= "file" or not item.abs_filename then return false end
+  for _, doc in ipairs(core.docs) do
+    if doc.abs_filename == item.abs_filename then return true end
+  end
+  return false
+end
+
+
 function TreeView:get_item_icon(item, active, hovered)
   local character = "f"
   if item.type == "dir" then
@@ -372,6 +388,8 @@ function TreeView:get_item_icon(item, active, hovered)
     color = style.accent
   elseif item.ignored then
     color = style.dim
+  elseif is_open_file(item) then
+    color = open_file_color()
   end
   return character, font, color
 end
@@ -384,6 +402,8 @@ function TreeView:get_item_text(item, active, hovered)
     color = style.accent
   elseif item.ignored then
     color = style.dim
+  elseif is_open_file(item) then
+    color = open_file_color()
   end
   return text, font, color
 end
@@ -541,7 +561,7 @@ local toolbar_view = nil
 local toolbar_plugin, ToolbarView = pcall(require, "plugins.toolbarview")
 if config.plugins.toolbarview ~= false and toolbar_plugin then
   toolbar_view = ToolbarView()
-  view.node:split("down", toolbar_view, {y = true})
+  view.node:split("up", toolbar_view, {y = true})
   local min_toolbar_width = toolbar_view:get_min_width()
   view:set_target_size("x", math.max(config.plugins.treeview.size, min_toolbar_width))
   command.add(nil, {
@@ -905,9 +925,9 @@ config.plugins.treeview.config_spec = {
     path = "size",
     type = "number",
     default = toolbar_view and math.ceil(toolbar_view:get_min_width() / SCALE)
-      or 200 * SCALE,
+      or 170 * SCALE,
     min = toolbar_view and toolbar_view:get_min_width() / SCALE
-      or 200 * SCALE,
+      or 170 * SCALE,
     get_value = function(value)
       return value / SCALE
     end,
@@ -935,5 +955,22 @@ config.plugins.treeview.config_spec = {
 -- Return the treeview with toolbar and contextmenu to allow
 -- user or plugin modifications
 view.toolbar = toolbar_view
+
+-- Register the explorer button on the activity bar (panel selector).
+local ok_activitybar, activitybar = pcall(require, "plugins.activitybar")
+if ok_activitybar then
+  activitybar.add_button({
+    id = "explorer",
+    symbol = "D",
+    tooltip = "Explorer",
+    show = function()
+      activitybar.show_only("explorer")
+      view.visible = true
+      core.set_active_view(view)
+    end,
+    hide = function() view.visible = false end,
+    is_active = function() return view.visible end,
+  })
+end
 
 return view

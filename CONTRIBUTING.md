@@ -1,65 +1,56 @@
-Here are a few ways you can help improve Lite-XL.
+# Contributing to Max XL
 
-First, please join the [Discord server](https://discord.gg/RWzqC3nx7K) or the [Matrix space](
-https://matrix.to/#/#lite-xl:matrix.org) where most of the coordination happens. Those spaces
-are bridged so you need only join one.
+Thanks for your interest in Max XL!
 
-# State as of October 2025
+Max XL is a **fork of [Lite XL](https://github.com/lite-xl/lite-xl)**, so a lot of
+the editor behaviour, the Lua core and the plugin/theme ecosystem are shared with
+upstream. When in doubt, changes that improve the editor generally also make sense
+upstream — feel free to send them to Lite XL as well.
 
-Work is mostly focused towards version 3 which includes some important rewrites to make the editor more robust, have a better plugin API, and add support for multiple windows. 
+## Ways to help
 
-As of 2025-10-25, only the core plugins are considered ported to the new plugin API. Some of the non-core ones have, but your mileage will vary a lot. 
+- **Report bugs and request features** in the issue tracker of this fork
+  (https://github.com/fabiovila/max-xl/issues). Please include your OS, how Max XL
+  was built/installed and a short description of what you did to trigger the issue.
+- **Fix bugs and implement features** via pull requests.
+- **Write plugins and themes.** Most functionality should be added as a plugin
+  rather than baked into the core editor.
 
-# Using the preview version
+## Plugins and themes
 
-You can help by using the 3.0 preview version, and reporting any bug you encounter.
-It can be run via [lpm](https://github.com/lite-xl/lite-xl-plugin-manager) like this:
+Max XL is compatible with the Lite XL plugin and color-theme ecosystem:
 
-```
-lpm run https://github.com/adamharrison/lite-xl.git:3.0-preview 3.0-preview --update
-```
+- Plugins: https://github.com/lite-xl/lite-xl-plugins
+- Colors: https://github.com/lite-xl/lite-xl-colors
 
-Please report any issue either on [Github](https://github.com/lite-xl/lite-xl/issues),
-[Discord](https://discord.gg/RWzqC3nx7K), or Matrix (`#lite-xl:matrix.org`).
+You can also keep plugins local to this fork by placing them in `data/plugins/`.
 
-# Contributing code
+## Contributing code
 
-If you're willing to get your hands dirty, bug fixes in the form of PRs are also welcome.
+Pull requests against `master` are welcome. Please try to:
 
-## Compiling the development version
+- Keep changes focused and consistent with the surrounding code style.
+- Follow the commit message conventions used in the repository.
+- Add or update documentation when you change user-facing behaviour.
 
-As of 2025-10-25, work is happening simultaneously on multiple branches, which are regularly merged by @adamharrison on a branch called `3.0-preview`. This is the state you want to check out:
-
-```
-git clone https://github.com/adamharrison/lite-xl
-git checkout 3.0-preview
-```
+### Compiling the development version
 
 Regular building instructions from [README.md](README.md#quick-build-guide) apply.
+A convenient way to run a development build with its own configuration directory
+(so it does not clash with your normal install) is:
 
-If you want to work with two distinct installations of Lite XL (the stable version 2, and a development version 3) here's a suggestion for how to do it on Linux:
-
-```
-# Assuming you have all the dependencies installed.
-cd lite-xl
-meson setup --buildtype=release --prefix /lite-xl-dev build-release
+```sh
+meson setup --buildtype=release --prefix /max-xl-dev build-release
 meson compile -C build-release
 
 INSTALL_DIR=$HOME/.local
-# Installs the development version under ${INSTALL_DIR}/lite-xl-dev
 meson install --destdir "${INSTALL_DIR}" --skip-subprojects -C build-release
 
-# A convenient alias to run the dev version with a dedicated config directory, 
-# to not conflict with the default one ($HOME/.config/lite-xl)
-alias lite-xl-dev="LITE_USERDIR=$HOME/.config/lite-xl-dev ${INSTALL_DIR}/lite-xl-dev/bin/lite-xl"
+# Run the development build with a dedicated config directory
+alias max-xl-dev="LITE_USERDIR=$HOME/.config/max-xl-dev ${INSTALL_DIR}/max-xl-dev/bin/max-xl"
 ```
 
-## Filing PRs
+## License
 
-- Changes related to virtual lines: file the PR against https://github.com/adamharrison/lite-xl/tree/PR/virtual-lines
-- Changes related to multi-window support: file the PR against https://github.com/adamharrison/lite-xl/tree/PR/multi-windows-ipc
-- Any other changes to the core editor: file the PR against https://github.com/adamharrison/lite-xl/tree/3.0-preview, or against master (https://github.com/lite-xl/lite-xl).
-- For non-core plugins, file PRs against https://github.com/adamharrison/lite-xl-plugins/tree/3.0
-
-Then send a message on the #lite-xl Discord or Matrix channel to make people aware of the PR.
-
+By contributing you agree that your contributions are licensed under the
+[MIT license](LICENSE), the same license as this project.

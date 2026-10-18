@@ -604,6 +604,31 @@ local commands = {
     end
   end,
 
+  ["doc:save-all"] = function()
+    local saved, skipped, failed = 0, 0, 0
+    for _, d in ipairs(core.docs) do
+      if d:is_dirty() then
+        if d.filename then
+          local ok, err = pcall(d.save, d)
+          if ok then
+            saved = saved + 1
+          else
+            failed = failed + 1
+            core.error(err)
+          end
+        else
+          skipped = skipped + 1
+        end
+      end
+    end
+    if failed == 0 and skipped == 0 then
+      core.log("Saved %d file(s)", saved)
+    else
+      core.log("Saved %d file(s), %d failed, %d untitled skipped",
+        saved, failed, skipped)
+    end
+  end,
+
   ["doc:reload"] = function(dv)
     dv.doc:reload()
   end,

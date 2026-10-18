@@ -7,7 +7,7 @@ subprojects/*/
 .vscode
 .cache
 .ccls-cache
-.lite-debug.log
+.max-xl-debug.log
 .run*
 *.diff
 *.exe
@@ -17,11 +17,14 @@ subprojects/*/
 *App*
 compile_commands.json
 error.txt
-lite-xl*
-LiteXL*
+max-xl*
+MaxXL*
+
+subprojects/.wraplock
 
 !resources/windows/*.diff
 !resources/windows/*.exe.manifest.in
 !resources/macos/*.py
-!scripts/innosetup/lite-xl@*.bmp
-!scripts/innosetup/lite-xl-banner@*.bmp
+!resources/icons/*.svg
+!scripts/innosetup/max-xl@*.bmp
+!scripts/innosetup/max-xl-banner@*.bmp

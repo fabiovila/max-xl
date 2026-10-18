@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Lite XL
+Name=Max XL
 Comment=A lightweight text editor written in Lua
-Exec=lite-xl %F
-Icon=lite-xl
+Exec=max-xl %F
+Icon=max-xl
 Terminal=false
-StartupWMClass=com.lite_xl.LiteXL
+StartupWMClass=com.max_xl.MaxXL
 Categories=Development;IDE;
 MimeType=text/plain;inode/directory;

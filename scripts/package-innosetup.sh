@@ -2,7 +2,7 @@
 set -e
 
 if [ ! -e "src/api/api.h" ]; then
-  echo "Please run this script from the root directory of Lite XL."; exit 1
+  echo "Please run this script from the root directory of Max XL."; exit 1
 fi
 
 source scripts/common.sh
@@ -77,10 +77,10 @@ main() {
 
   [[ ! -e $build_dir ]] && scripts/build.sh $@
 
-  output="lite-xl-${version}-${arch_file}-windows-setup"
+  output="max-xl-${version}-${arch_file}-windows-setup"
 
   "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -dARCH=$arch //F"${output}" "${build_dir}/scripts/innosetup.iss"
-  pushd "${build_dir}/scripts"; mv lite-xl*.exe "./../../"; popd
+  pushd "${build_dir}/scripts"; mv max-xl*.exe "./../../"; popd
 }
 
 main "$@"

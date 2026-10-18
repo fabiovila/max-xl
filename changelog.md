@@ -1,5 +1,9 @@
 # Changes Log
 
+> **Note:** Max XL is a fork of [Lite XL](https://github.com/lite-xl/lite-xl).
+> This changelog is inherited from the upstream project and documents its
+> history up to the fork point; entries below refer to Lite XL.
+
 ## [2.1.7] - 2024-12-05
 
 This release fixes a bug related to scaling on macOS,

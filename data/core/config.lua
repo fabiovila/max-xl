@@ -2,7 +2,7 @@ local common = require "core.common"
 
 local config = {}
 
----The frame rate of Lite XL.
+---The frame rate of Max XL.
 ---Note that setting this value to the screen's refresh rate
 ---does not eliminate screen tearing.
 ---
@@ -224,7 +224,7 @@ config.draw_whitespace = false
 
 ---Disables system-drawn window borders.
 ---
----When set to true, Lite XL draws its own window decorations,
+---When set to true, Max XL draws its own window decorations,
 ---which can be useful for certain setups.
 ---
 ---Defaults to false.
@@ -238,7 +238,7 @@ config.borderless = false
 ---@type boolean
 config.tab_close_button = true
 
----Maximum number of clicks recognized by Lite XL.
+---Maximum number of clicks recognized by Max XL.
 ---
 ---Defaults to 3.
 ---@type number

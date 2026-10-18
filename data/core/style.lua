@@ -52,4 +52,32 @@ style.syntax_fonts = {}
 
 style.log = {}
 
+-- XXL sidebar panels (search, git, ...) resolve their colors through this
+-- helper so color themes can rebrand them with a single table:
+--
+--   style.search = { accent = {...}, panel_bg = {...}, ... }
+--
+-- (full key list documented in plugins/searchpanel.lua). Every key falls
+-- back to a core color, so existing themes keep working unchanged.
+function style.panel_theme()
+  local s = style.search or {}
+  return {
+    panel_bg  = s.panel_bg  or style.background2,
+    field_bg  = s.field_bg  or style.background3,
+    border    = s.border    or style.divider,
+    focus     = s.focus     or style.accent,
+    accent    = s.accent    or style.accent,
+    header_bg = s.header_bg or style.accent,
+    header_text = s.header_text or style.background,
+    text      = s.text      or style.text,
+    dim       = s.dim       or style.dim,
+    selection = s.selection or style.selection,
+    highlight = s.highlight or style.line_highlight,
+    match     = s.match     or style.accent,
+    caret     = s.caret     or style.caret or style.text,
+    warn      = s.warn      or style.error or style.accent,
+    terminal_bg = s.terminal_bg or { 0, 0, 0, 255 },
+  }
+end
+
 return style

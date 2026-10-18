@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleExecutable</key>
-	<string>lite-xl</string>
+	<string>max-xl</string>
 	<key>CFBundleGetInfoString</key>
-	<string>lite-xl</string>
+	<string>max-xl</string>
 	<key>CFBundleIconFile</key>
 	<string>icon.icns</string>
 	<key>CFBundleDocumentTypes</key>
@@ -33,9 +33,9 @@
 		<string>public.text</string>
 	</array>
 	<key>CFBundleIdentifier</key>
-	<string>com.lite-xl</string>
+	<string>com.max_xl.MaxXL</string>
 	<key>CFBundleName</key>
-	<string>Lite XL</string>
+	<string>Max XL</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>NSHighResolutionCapable</key>
@@ -53,7 +53,8 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2020 rxi
 © 2020-2022 Francesco Abbate
-© 2022-@CURRENT_YEAR@ Lite XL Team</string>
+© 2022-@CURRENT_YEAR@ Lite XL Team
+Max XL is a fork of Lite XL — © @CURRENT_YEAR@ Max XL contributors</string>
 </dict>
 </plist>
 

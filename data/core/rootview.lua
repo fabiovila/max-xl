@@ -1,6 +1,7 @@
 local core = require "core"
 local common = require "core.common"
 local style = require "core.style"
+local command = require "core.command"
 local Node = require "core.node"
 local View = require "core.view"
 local DocView = require "core.docview"
@@ -50,6 +51,15 @@ function RootView:get_active_node()
 end
 
 
+---@return core.node? first unlocked leaf, or nil
+local function find_unlocked_leaf(node)
+  if node.type == "leaf" then
+    return not node.locked and node or nil
+  end
+  return find_unlocked_leaf(node.a) or find_unlocked_leaf(node.b)
+end
+
+
 ---@return core.node
 local function get_primary_node(node)
   if node.is_primary_node then
@@ -65,8 +75,16 @@ end
 function RootView:get_active_node_default()
   local node = self.root_node:get_node_for_view(core.active_view)
   if not node then node = self:get_primary_node() end
-  if node.locked then
-    local default_view = self:get_primary_node().views[1]
+  if not node then node = find_unlocked_leaf(self.root_node) end
+  if node and node.locked then
+    local primary = self:get_primary_node()
+    local default_view = primary and primary.views[1]
+    if not default_view then
+      -- no primary anywhere (legacy/corrupt layout): fall back to any
+      -- unlocked leaf instead of crashing on a nil index
+      local any = find_unlocked_leaf(self.root_node)
+      default_view = any and any.views[1]
+    end
     assert(default_view, "internal error: cannot find original document node.")
     core.set_active_view(default_view)
     node = self:get_active_node()
@@ -184,8 +202,23 @@ function RootView:on_mouse_pressed(button, x, y, clicks)
     node:scroll_tabs(node.hovered_scroll_button)
     return true
   end
+  if button == "left" then
+    local split = node:get_split_button_at(x, y)
+    if split then
+      node:set_active_view(node.active_view)
+      command.perform(split == 1 and "root:split-right" or "root:split-down")
+      return true
+    end
+  end
   local idx = node:get_tab_overlapping_point(x, y)
   if idx then
+    if button == "right" then
+      -- Select the tab and let the keymap open the tab context menu
+      -- (plugins/tabmenu.lua). Consuming the click here would swallow it
+      -- and no menu would ever show on the tab bar.
+      node:set_active_view(node.views[idx])
+      return false
+    end
     if button == "middle" or node.hovered_close == idx then
       node:close_view(self.root_node, node.views[idx])
       return true
@@ -415,8 +448,8 @@ function RootView:on_file_dropped(filename, x, y)
       )
       return true
     end
-    -- in macOS, when dropping folders into Lite XL in the dock,
-    -- the OS tries to start an instance of Lite XL with each folder as a DND request.
+    -- in macOS, when dropping folders into Max XL in the dock,
+    -- the OS tries to start an instance of Max XL with each folder as a DND request.
     -- When this happens, the DND request always arrive before the first update() call.
     -- We need to change the current project folder for the first request, and start
     -- new instances for the rest to emulate existing behavior.
@@ -440,7 +473,7 @@ end
 function RootView:process_defer_open_docs()
   if core.active_view == core.nag_view then return end
   for _, drop in ipairs(self.defer_open_docs) do
-    -- file dragged into lite-xl, try to open it
+    -- file dragged into max-xl, try to open it
     local filename, x, y = table.unpack(drop)
     local ok, doc = core.try(core.open_doc, filename)
     if ok then

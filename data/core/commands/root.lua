@@ -1,6 +1,7 @@
 local core = require "core"
 local style = require "core.style"
 local DocView = require "core.docview"
+local EmptyView = require "core.emptyview"
 local command = require "core.command"
 local common = require "core.common"
 local config = require "core.config"
@@ -73,6 +74,12 @@ end
 for _, dir in ipairs { "left", "right", "up", "down" } do
   t["root:split-" .. dir] = function(node)
     local av = node.active_view
+    if av:is(EmptyView) then
+      -- Splitting an empty view only multiplies empty views with no
+      -- way back; refuse instead of building a stuck layout.
+      core.log("Nothing to split")
+      return
+    end
     node:split(dir)
     if av:is(DocView) then
       core.root_view:open_doc(av.doc)

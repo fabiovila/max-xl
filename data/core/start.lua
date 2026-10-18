@@ -1,4 +1,4 @@
--- this file is used by lite-xl to setup the Lua environment when starting
+-- this file is used by max-xl to setup the Lua environment when starting
 VERSION = "@PROJECT_VERSION@"
 MOD_VERSION_MAJOR = 4
 MOD_VERSION_MINOR = 0
@@ -13,12 +13,30 @@ if MACOS_RESOURCES then
   DATADIR = MACOS_RESOURCES
 else
   local prefix = os.getenv('LITE_PREFIX') or EXEDIR:match("^(.+)[/\\]bin$")
-  DATADIR = prefix and (prefix .. PATHSEP .. 'share' .. PATHSEP .. 'lite-xl') or (EXEDIR .. PATHSEP .. 'data')
+  DATADIR = prefix and (prefix .. PATHSEP .. 'share' .. PATHSEP .. 'max-xl') or (EXEDIR .. PATHSEP .. 'data')
 end
 USERDIR = (system.get_file_info(EXEDIR .. PATHSEP .. 'user') and (EXEDIR .. PATHSEP .. 'user'))
        or os.getenv("LITE_USERDIR")
-       or ((os.getenv("XDG_CONFIG_HOME") and os.getenv("XDG_CONFIG_HOME") .. PATHSEP .. "lite-xl"))
-       or (HOME and (HOME .. PATHSEP .. '.config' .. PATHSEP .. 'lite-xl'))
+       or ((os.getenv("XDG_CONFIG_HOME") and os.getenv("XDG_CONFIG_HOME") .. PATHSEP .. "max-xl"))
+       or (HOME and (HOME .. PATHSEP .. '.config' .. PATHSEP .. 'max-xl'))
+
+-- Source checkout (meson never substituted the version): show a dev tag
+-- with the source hash + worktree fingerprint, so it's always clear
+-- which code is actually running (kills the "did my restart pick up
+-- the fix?" doubt). Anything after '+' changes with every edit.
+if VERSION:find("@", 1, true) then
+  VERSION = "dev"
+  local function git_out(cmd)
+    local pipe = io.popen("git -C " .. EXEDIR .. " " .. cmd .. " 2>/dev/null")
+    if not pipe then return nil end
+    local s = pipe:read("*l")
+    pipe:close()
+    return (s and s ~= "") and s or nil
+  end
+  local head = git_out("rev-parse --short HEAD") or "?"
+  local fp = git_out("status --porcelain | sha1sum") or "?"
+  VERSION = string.format("dev-%s+%s", head, fp:sub(1, 7))
+end
 
 package.path = DATADIR .. '/?.lua;'
 package.path = DATADIR .. '/?/init.lua;' .. package.path

@@ -7,6 +7,10 @@ local storage = require "core.storage"
 
 local STORAGE_MODULE = "ws"
 
+-- Set by reset-layout so the restart it triggers doesn't re-save
+-- the layout we just dropped.
+local suppress_next_save = false
+
 local function workspace_keys_for(project_dir)
   local basename = common.basename(project_dir)
   return coroutine.wrap(function()
@@ -171,7 +175,39 @@ local function save_directories()
 end
 
 
+local function is_empty_leaf(node)
+  if node.type ~= "leaf" or node.locked then return false end
+  if #node.views == 0 then return true end
+  return #node.views == 1 and node.views[1]:is(require "core.emptyview")
+end
+
+
+-- Collapses splits whose leaves hold nothing but empty views, bottom-up.
+-- A restored session therefore never shows bare logo-splits: no open
+-- documents means a single editor, no matter what was saved.
+local function prune_empty_leaves(node)
+  if node.type == "leaf" then return end
+  prune_empty_leaves(node.a)
+  prune_empty_leaves(node.b)
+  local a_empty, b_empty = is_empty_leaf(node.a), is_empty_leaf(node.b)
+  if a_empty and b_empty then
+    node:consume(require("core.node")())
+    node:set_active_view(node.active_view)
+  elseif a_empty then
+    node:consume(node.b)
+    node:set_active_view(node.active_view)
+  elseif b_empty then
+    node:consume(node.a)
+    node:set_active_view(node.active_view)
+  end
+end
+
+
 local function save_workspace()
+  if suppress_next_save then
+    suppress_next_save = false
+    return
+  end
   local project_dir = common.basename(core.root_project().path)
   local id_list = {}
   for filename, id in workspace_keys_for(project_dir) do
@@ -191,8 +227,16 @@ local function load_workspace()
   if workspace then
     local root = get_unlocked_root(core.root_view.root_node)
     local active_view = load_node(root, workspace.documents)
+    prune_empty_leaves(get_unlocked_root(core.root_view.root_node))
     if active_view then
       core.set_active_view(active_view)
+    else
+      -- all-empty restore: point at the live survivor instead of a
+      -- discarded empty view
+      local primary = core.root_view:get_primary_node()
+      if primary and primary.active_view then
+        core.set_active_view(primary.active_view)
+      end
     end
     for i, dir_name in ipairs(workspace.directories) do
       core.add_project(system.absolute_path(dir_name))
@@ -219,9 +263,27 @@ function core.run(...)
       if force then core.try(save_workspace) end
       exit(quit_fn, force)
     end
-    
+
   end
 
   core.run = run
   return core.run(...)
 end
+
+
+local command = require "core.command"
+
+command.add(nil, {
+  -- Drops the saved layout (splits, sizes, open docs) of the current
+  -- project and restarts with a clean single editor.
+  ["workspace:reset-layout"] = function()
+    if core.root_project() then
+      consume_workspace(core.root_project().path)
+    end
+    suppress_next_save = true
+    command.perform("core:restart")
+  end,
+})
+
+-- Exposed for tests; not part of the user API.
+return { prune_empty_leaves = prune_empty_leaves }

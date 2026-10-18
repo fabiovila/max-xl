@@ -2,6 +2,8 @@ local core = require "core"
 local common = require "core.common"
 local config = require "core.config"
 local style = require "core.style"
+local keymap = require "core.keymap"
+local command = require "core.command"
 local Object = require "core.object"
 local EmptyView = require "core.emptyview"
 local View = require "core.view"
@@ -271,6 +273,7 @@ end
 
 function Node:get_tab_overlapping_point(px, py)
   if not self:should_show_tabs() then return nil end
+  if self:get_split_button_at(px, py) then return nil end
   local tabs_number = self:get_visible_tabs_number()
   local x1, y1, w, h = self:get_tab_rect(self.tab_offset)
   local x2, y2 = self:get_tab_rect(self.tab_offset + tabs_number)
@@ -312,6 +315,21 @@ end
 
 
 function Node:tab_hovered_update(px, py)
+  local split = self:get_split_button_at(px, py)
+  if split ~= self.hovered_split then
+    self.hovered_split = split
+    if split then
+      local cmd = split == 1 and "root:split-right" or "root:split-down"
+      local binding = keymap.get_binding(cmd)
+      local name = command.prettify_name(cmd)
+      core.status_view:show_tooltip(binding and { name, style.dim, "  ", binding } or { name })
+      self.split_tooltip = true
+    elseif self.split_tooltip then
+      core.status_view:remove_tooltip()
+      self.split_tooltip = false
+    end
+    core.redraw = true
+  end
   local tab_index = self:get_tab_overlapping_point(px, py)
   self.hovered_tab = tab_index
   self.hovered_close = 0
@@ -351,13 +369,57 @@ end
 function Node:get_scroll_button_rect(index)
   local w, pad = get_scroll_button_width()
   local h = get_tab_y_sizes()
-  local x = self.position.x + (index == 1 and self.size.x - w * 2 or self.size.x - w)
+  local avail = self.size.x - self:get_split_reserved_width()
+  local x = self.position.x + (index == 1 and avail - w * 2 or avail - w)
   return x, self.position.y, w, h, pad
 end
 
 
+-- Width reserved at the right end of the tab bar for the split buttons
+-- (0 when the tab bar itself is hidden). Kept independent from
+-- `get_scroll_button_rect` to avoid circular dependencies.
+function Node:get_split_reserved_width()
+  if self.type ~= "leaf" or self.locked or self:is_empty() then return 0 end
+  if not self:should_show_tabs() then return 0 end
+  return get_tab_y_sizes() * 2
+end
+
+
+---@return 1|2|nil #1 for split-right, 2 for split-down
+function Node:get_split_button_at(px, py)
+  local reserved = self:get_split_reserved_width()
+  if reserved <= 0 then return nil end
+  local y = self.position.y
+  local h = get_tab_y_sizes()
+  if py < y or py >= y + h then return nil end
+  local x0 = self.position.x + self.size.x - reserved
+  if px < x0 or px >= x0 + reserved then return nil end
+  return px < x0 + reserved / 2 and 1 or 2
+end
+
+
+function Node:draw_split_button(idx, x, y, w, h)
+  local color = self.hovered_split == idx and style.accent or style.text
+  local px = math.floor(w * 0.28)
+  local py = math.floor(h * 0.30)
+  local x1, y1 = x + px, y + py
+  local x2, y2 = x + w - px, y + h - py
+  renderer.draw_rect(x1, y1, x2 - x1, 1, color)
+  renderer.draw_rect(x1, y2 - 1, x2 - x1, 1, color)
+  renderer.draw_rect(x1, y1, 1, y2 - y1, color)
+  renderer.draw_rect(x2 - 1, y1, 1, y2 - y1, color)
+  if idx == 1 then
+    local mx = math.floor((x1 + x2) / 2)
+    renderer.draw_rect(mx, y1, 1, y2 - y1, color)
+  else
+    local my = math.floor((y1 + y2) / 2)
+    renderer.draw_rect(x1, my, x2 - x1, 1, color)
+  end
+end
+
+
 function Node:get_tab_rect(idx)
-  local maxw = self.size.x
+  local maxw = self.size.x - self:get_split_reserved_width()
   local x0 = self.position.x
   local x1 = x0 + common.clamp(self.tab_width * (idx - 1) - self.tab_shift, 0, maxw)
   local x2 = x0 + common.clamp(self.tab_width * idx - self.tab_shift, 0, maxw)
@@ -496,9 +558,9 @@ end
 
 function Node:target_tab_width()
   local n = self:get_visible_tabs_number()
-  local w = self.size.x
+  local w = self.size.x - self:get_split_reserved_width()
   if #self.views > n then
-    w = self.size.x - get_scroll_button_width() * 2
+    w = w - get_scroll_button_width() * 2
   end
   return common.clamp(style.tab_width, w / config.max_tabs, w / n)
 end
@@ -583,9 +645,15 @@ function Node:draw_tabs()
   local x = self.position.x
   local ds = style.divider_size
   local dots_width = style.font:get_width("…")
-  core.push_clip_rect(x, y, self.size.x, h)
+  local reserved = self:get_split_reserved_width()
+  -- Paint the whole tab bar (including the split-button strip) before the
+  -- clip. rencache/ren_draw only repaints pixels touched by a draw command,
+  -- so if the strip right of the tabs clip were left unpainted it would
+  -- keep stale pixels (tab titles, close buttons) and the split buttons
+  -- would look corrupted while/after resizing a pane.
   renderer.draw_rect(x, y, self.size.x, h, style.background2)
   renderer.draw_rect(x, y + h - ds, self.size.x, ds, style.divider)
+  core.push_clip_rect(x, y, math.max(0, self.size.x - reserved), h)
   local tabs_number = self:get_visible_tabs_number()
 
   for i = self.tab_offset, self.tab_offset + tabs_number - 1 do
@@ -609,6 +677,14 @@ function Node:draw_tabs()
   end
 
   core.pop_clip_rect()
+
+  -- split buttons live outside the tabs clip rect
+  if reserved > 0 then
+    local btn_w = reserved / 2
+    local bx = self.position.x + self.size.x - reserved
+    self:draw_split_button(1, bx, y, btn_w, h)
+    self:draw_split_button(2, bx + btn_w, y, btn_w, h)
+  end
 end
 
 
@@ -640,6 +716,7 @@ end
 
 function Node:is_in_tab_area(x, y)
   if not self:should_show_tabs() then return false end
+  if self:get_split_button_at(x, y) then return false end
   local _, ty, _, th = self:get_scroll_button_rect(1)
   return y >= ty and y < ty + th
 end

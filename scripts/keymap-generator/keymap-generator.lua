@@ -54,7 +54,7 @@ local function process_module(mod, filename)
 end
 
 
-print("Warning: this is not guaranteed to work outside lite-xl's own keymap. Proceed with caution")
+print("Warning: this is not guaranteed to work outside max-xl's own keymap. Proceed with caution")
 local LITE_ROOT = arg[1]
 if not LITE_ROOT then
   error("LITE_ROOT is not given")

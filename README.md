@@ -1,51 +1,60 @@
-# Lite XL
+# Max XL
 
-[![CI]](https://github.com/lite-xl/lite-xl/actions/workflows/build.yml)
-[![Discord Badge Image]](https://discord.gg/UQKnzBhY5H)
+A lightweight text editor written in Lua, forked from [Lite XL], with a
+Visual Studio Code-style workflow: an activity bar, sidebar panels (search,
+Git, problems, file explorer) and an embedded interactive terminal.
 
-![screenshot-dark]
+## Fork and acknowledgements
 
-A lightweight text editor written in Lua, adapted from [lite].
+Max XL is a **fork of [Lite XL]**, which in turn derives from [lite] by rxi.
+This project would not exist without the work of the Lite XL team and its
+contributors, and the rxi/lite authors before them. Many thanks to all of them.
 
-* **[Get Lite XL]** — Download for Windows, Linux and Mac OS.
-* **[Get plugins]** — Add additional functionality, adapted for Lite XL.
-* **[Get color themes]** — Add additional colors themes.
+The upstream copyright notices and the MIT license are preserved — see
+[LICENSE]. The fork-specific code is released under the same MIT license.
 
-Please refer to our [website] for the user and developer documentation,
-including [build] instructions details. A quick build guide is described below.
+- Upstream project: <https://github.com/lite-xl/lite-xl>
+- Original editor: <https://github.com/rxi/lite>
 
-Lite XL has support for high DPI display on Windows and Linux and,
-since 1.16.7 release, it supports **retina displays** on macOS.
+## Features
 
-Please note that Lite XL is compatible with lite for most plugins and all color themes.
-We provide a separate lite-xl-plugins repository for Lite XL, because in some cases
-some adaptations may be needed to make them work better with Lite XL.
-The repository with modified plugins is https://github.com/lite-xl/lite-xl-plugins.
+Max XL keeps the fast, small and hackable core of Lite XL and adds a
+VS Code-style workflow:
 
-The changes and differences between Lite XL and rxi/lite are listed in the
-[changelog].
+- **Activity bar** with buttons for the explorer, search, source control and
+  problems views.
+- **Search panel** (project-wide find & replace).
+- **Git panel** (status, stage, commit) backed by the system `git`.
+- **Problems panel** (`Ctrl+Shift+M`).
+- **Integrated console** (`Ctrl+Alt+T`).
+- **Embedded interactive terminal** in a bottom split, running your real shell
+  (`fish`, `bash`, …) through a built-in PTY.
+- **Tab context menu**: close (left / right / others / all), duplicate to the
+  right or below, move, save, copy path / relative path and reveal.
+- Empty panes are pruned automatically, and the layout can be reset from the
+  command palette.
 
-## Overview
-
-Lite XL is derived from [lite].
-It is a lightweight text editor written mostly in Lua — it aims to provide
-something practical, pretty, *small* and fast easy to modify and extend,
-or to use without doing either.
-
-The aim of Lite XL compared to lite is to be more user friendly,
-improve the quality of font rendering, and reduce CPU usage.
+The editor also inherits Lite XL's features: multi-cursor editing, a command
+palette, a project-aware file tree, configurable fonts (including grayscale
+antialiasing), and the Lua plugin/theme ecosystem.
 
 ## Customization
 
-Additional functionality can be added through plugins which are available in
-the [plugins repository] or in the [Lite XL plugins repository].
+Additional functionality can be added through plugins and color themes. Max XL
+is compatible with the Lite XL ecosystem:
 
-Additional color themes can be found in the [colors repository].
-These color themes are bundled with all releases of Lite XL by default.
+- Plugins: <https://github.com/lite-xl/lite-xl-plugins>
+- Color themes: <https://github.com/lite-xl/lite-xl-colors>
+
+Plugins can also be bundled locally in `data/plugins/`.
+
+User configuration lives in `~/.config/max-xl/` (or `$LITE_USERDIR`), and
+per-project configuration can be placed in a `.max-xl/init.lua` file inside the
+project directory.
 
 ## Quick Build Guide
 
-To compile Lite XL yourself, you must have the following dependencies installed
+To compile Max XL yourself, you must have the following dependencies installed
 via your desired package manager, or manually.
 
 ### Prerequisites
@@ -61,11 +70,8 @@ via your desired package manager, or manually.
 SDL2, PCRE2, FreeType2 and Lua will be downloaded by Meson
 if `--wrap-mode=forcefallback` or `--wrap-mode=default` is specified.
 
-> [!NOTE]
-> MSVC is used in the CI, but MSVC-compiled binaries are not distributed officially
-> or tested extensively for bugs.
-
-On Linux, you may install the following dependencies for the SDL2 X11 and/or Wayland backend to work properly:
+On Linux, you may install the following dependencies for the SDL2 X11 and/or
+Wayland backend to work properly:
 
 - `libX11-devel`
 - `libXi-devel`
@@ -84,21 +90,19 @@ apt-get install python3.8 python3-pip build-essential git cmake wayland-protocol
 pip3 install meson ninja
 ```
 
-Please refer to [lite-xl-build-box] for a working Linux build environment used to package official Lite XL releases.
-
-On macOS, you must install bash via Brew, as the default bash version on macOS is antiquated
-and may not run the build script correctly.
+On macOS, you must install bash via Brew, as the default bash version on macOS
+is antiquated and may not run the build script correctly.
 
 ### Building
 
-You can use `scripts/build.sh` to set up Lite XL and build it.
+You can use `scripts/build.sh` to set up Max XL and build it.
 
 ```sh
 $ bash build.sh --help
 # Usage: scripts/build.sh <OPTIONS>
-# 
+#
 # Available options:
-# 
+#
 # -b --builddir DIRNAME         Sets the name of the build directory (not path).
 #                               Default: 'build-x86_64-linux'.
 #    --debug                    Debug this script.
@@ -128,7 +132,7 @@ Alternatively, you can use the following commands to customize the build:
 ```sh
 meson setup --buildtype=release --prefix <prefix> build
 meson compile -C build
-DESTDIR="$(pwd)/lite-xl" meson install --skip-subprojects -C build
+DESTDIR="$(pwd)/max-xl" meson install --skip-subprojects -C build
 ```
 
 where `<prefix>` might be one of `/`, `/usr` or `/opt`, the default is `/`.
@@ -137,7 +141,7 @@ To build a bundle application on macOS:
 ```sh
 meson setup --buildtype=release --Dbundle=true --prefix / build
 meson compile -C build
-DESTDIR="$(pwd)/Lite XL.app" meson install --skip-subprojects -C build
+DESTDIR="$(pwd)/Max XL.app" meson install --skip-subprojects -C build
 ```
 
 Please note that the package is relocatable to any prefix and the option prefix
@@ -145,162 +149,132 @@ affects only the place where the application is actually installed.
 
 ## Installing Prebuilt
 
-Head over to [releases](https://github.com/lite-xl/lite-xl/releases) and download the version for your operating system.
-
-The prebuilt releases supports the following OSes:
-
-- Windows 7 and above
-- Ubuntu 18.04 and above (glibc 2.27 and above)
-- OS X El Capitan and above (version 10.11 and above)
-
-Some distributions may provide custom binaries for their platforms.
+Head over to [releases](https://github.com/fabiovila/max-xl/releases) and download
+the version for your operating system.
 
 ### Windows
 
-Lite XL comes with installers on Windows for typical installations.
-Alternatively, we provide ZIP archives that you can download and extract anywhere and run directly.
+Max XL comes with installers on Windows for typical installations.
+Alternatively, we provide ZIP archives that you can download and extract
+anywhere and run directly.
 
-To make Lite XL portable (e.g. running Lite XL from a thumb drive),
-simply create a `user` folder where `lite-xl.exe` is located.
-Lite XL will load and store all your configurations and plugins in the folder.
+To make Max XL portable (e.g. running Max XL from a thumb drive),
+simply create a `user` folder where `max-xl.exe` is located.
+Max XL will load and store all your configurations and plugins in the folder.
 
 ### macOS
 
-We provide DMG files for macOS. Simply drag the program into your Applications folder.
+We provide DMG files for macOS. Simply drag the program into your Applications
+folder.
 
 > **Important**
-> Newer versions of Lite XL are signed with a self-signed certificate,
-> so you'll have to follow these steps when running Lite XL for the first time.
+> Newer versions may be signed with a self-signed certificate, so you'll have to
+> follow these steps when running Max XL for the first time:
 >
-> 1. Find Lite XL in Finder (do not open it in Launchpad).
-> 2. Control-click Lite XL, then choose `Open` from the shortcut menu.
+> 1. Find Max XL in Finder (do not open it in Launchpad).
+> 2. Control-click Max XL, then choose `Open` from the shortcut menu.
 > 3. Click `Open` in the popup menu.
 >
-> The correct steps may vary between macOS versions, so you should refer to
-> the [macOS User Guide](https://support.apple.com/en-my/guide/mac-help/mh40616/mac).
+> If macOS reports the application as damaged, clear the quarantine attributes:
 >
-> On an older version of Lite XL, you will need to run these commands instead:
-> 
 > ```sh
-> # clears attributes from the directory
-> xattr -cr /Applications/Lite\ XL.app
+> xattr -cr /Applications/Max\ XL.app
 > ```
->
-> Otherwise, macOS will display a **very misleading error** saying that the application is damaged.
 
 ### Linux
 
-Unzip the file and `cd` into the `lite-xl` directory:
+Unzip the file and `cd` into the `max-xl` directory:
 
 ```sh
 tar -xzf <file>
-cd lite-xl
+cd max-xl
 ```
 
-To run lite-xl without installing:
+To run max-xl without installing:
 
 ```sh
-./lite-xl
+./max-xl
 ```
 
-To install lite-xl copy files over into appropriate directories:
+To install max-xl copy files over into appropriate directories:
 
 ```sh
-rm -rf  $HOME/.local/share/lite-xl $HOME/.local/bin/lite-xl
-mkdir -p $HOME/.local/bin && cp lite-xl $HOME/.local/bin/
-mkdir -p $HOME/.local/share/lite-xl && cp -r data/* $HOME/.local/share/lite-xl/
+rm -rf  $HOME/.local/share/max-xl $HOME/.local/bin/max-xl
+mkdir -p $HOME/.local/bin && cp max-xl $HOME/.local/bin/
+mkdir -p $HOME/.local/share/max-xl && cp -r data/* $HOME/.local/share/max-xl/
 ```
 
-#### Add Lite XL to PATH
+#### Add Max XL to PATH
 
-To run Lite XL from the command line, you must add it to PATH.
-
+To run Max XL from the command line, you must add it to PATH.
 If `$HOME/.local/bin` is not in PATH:
 
 ```sh
 echo -e 'export PATH=$PATH:$HOME/.local/bin' >> $HOME/.bashrc
 ```
 
-Alternatively on recent versions of GNOME and KDE Plasma,
-you can add `$HOME/.local/bin` to PATH via `~/.config/environment.d/envvars.conf`:
+Alternatively on recent versions of GNOME and KDE Plasma, you can add
+`$HOME/.local/bin` to PATH via `~/.config/environment.d/envvars.conf`:
 
 ```ini
 PATH=$HOME/.local/bin:$PATH
 ```
 
-> **Note**
-> Some systems might not load `.bashrc` when logging in.
-> This can cause problems with launching applications from the desktop / menu.
+#### Add Max XL to application launchers
 
-#### Add Lite XL to application launchers
-
-To get the icon to show up in app launcher, you need to create a desktop
-entry and put it into `/usr/share/applications` or `~/.local/share/applications`.
-
-Here is an example for a desktop entry in `~/.local/share/applications/com.lite_xl.LiteXL.desktop`,
-assuming Lite XL is in PATH:
+To get the icon to show up in the app launcher, create a desktop entry in
+`~/.local/share/applications/com.max_xl.MaxXL.desktop`, assuming Max XL is in
+PATH:
 
 ```ini
 [Desktop Entry]
 Type=Application
-Name=Lite XL
+Name=Max XL
 Comment=A lightweight text editor written in Lua
-Exec=lite-xl %F
-Icon=lite-xl
+Exec=max-xl %F
+Icon=max-xl
 Terminal=false
-StartupWMClass=lite-xl
+StartupWMClass=com.max_xl.MaxXL
 Categories=Development;IDE;
 MimeType=text/plain;inode/directory;
 ```
 
-To get the icon to show up in app launcher immediately, run:
+To get the icon to show up in the app launcher immediately, run:
 
 ```sh
 xdg-desktop-menu forceupdate
 ```
 
-Alternatively, you may log out and log in again.
-
 #### Uninstall
 
-To uninstall Lite XL, run:
+To uninstall Max XL, run:
 
 ```sh
-rm -f $HOME/.local/bin/lite-xl
-rm -rf $HOME/.local/share/icons/hicolor/scalable/apps/lite-xl.svg \
-          $HOME/.local/share/applications/com.lite_xl.LiteXL.desktop \
-          $HOME/.local/share/metainfo/com.lite_xl.LiteXL.appdata.xml \
-          $HOME/.local/share/lite-xl
+rm -f $HOME/.local/bin/max-xl
+rm -rf $HOME/.local/share/icons/hicolor/scalable/apps/max-xl.svg \
+          $HOME/.local/share/applications/com.max_xl.MaxXL.desktop \
+          $HOME/.local/share/metainfo/com.max_xl.MaxXL.metainfo.xml \
+          $HOME/.local/share/max-xl
 ```
 
 ## Contributing
 
-Any additional functionality that can be added through a plugin should be done
-as a plugin, after which a pull request to the [Lite XL plugins repository] can be made.
-
-Pull requests to improve or modify the editor itself are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+Pull requests and issues are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for details. Remember that Max XL is a fork of Lite XL, so improvements often
+make sense upstream too.
 
 ## Licenses
 
 This project is free software; you can redistribute it and/or modify it under
 the terms of the MIT license. See [LICENSE] for details.
 
-See the [licenses] file for details on licenses used by the required dependencies.
+Max XL is a fork of [Lite XL]; the original copyright notices are preserved.
+
+See the [licenses] file for details on licenses used by the required
+dependencies.
 
 
-[CI]:                         https://github.com/lite-xl/lite-xl/actions/workflows/build.yml/badge.svg
-[Discord Badge Image]:        https://img.shields.io/discord/847122429742809208?label=discord&logo=discord
-[screenshot-dark]:            https://user-images.githubusercontent.com/433545/111063905-66943980-84b1-11eb-9040-3876f1133b20.png
-[lite]:                       https://github.com/rxi/lite
-[website]:                    https://lite-xl.com
-[build]:                      https://lite-xl.com/setup/building-from-source/
-[Get Lite XL]:                https://github.com/lite-xl/lite-xl/releases/latest
-[Get plugins]:                https://github.com/lite-xl/lite-xl-plugins
-[Get color themes]:           https://github.com/lite-xl/lite-xl-colors
-[changelog]:                  https://github.com/lite-xl/lite-xl/blob/master/changelog.md
-[Lite XL plugins repository]: https://github.com/lite-xl/lite-xl-plugins
-[plugins repository]:         https://github.com/rxi/lite-plugins
-[colors repository]:          https://github.com/lite-xl/lite-xl-colors
-[LICENSE]:                    LICENSE
-[licenses]:                   licenses/licenses.md
-[lite-xl-build-box]:          https://github.com/lite-xl/lite-xl-build-box
+[Lite XL]:        https://github.com/lite-xl/lite-xl
+[lite]:           https://github.com/rxi/lite
+[LICENSE]:        LICENSE
+[licenses]:       licenses/licenses.md

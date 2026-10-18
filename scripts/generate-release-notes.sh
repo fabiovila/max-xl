@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 if [ ! -e "src/api/api.h" ]; then
-  echo "Please run this script from the root directory of Lite XL."; exit 1
+  echo "Please run this script from the root directory of Max XL."; exit 1
 fi
 
 show_help() {
   echo
-  echo "Release notes generator for lite-xl releases."
+  echo "Release notes generator for max-xl releases."
   echo "USE IT AT YOUR OWN RISK!"
   echo
   echo "Usage: $0 <OPTIONS>"
