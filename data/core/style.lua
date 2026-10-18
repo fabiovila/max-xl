@@ -30,16 +30,19 @@ style.margin = {
 -- - for antialiasing: grayscale, subpixel
 -- - for hinting: none, slight, full
 --
--- The defaults values are antialiasing subpixel and hinting slight for optimal visualization
--- on ordinary LCD monitor with RGB patterns.
+-- Max XL ships with grayscale antialiasing and full hinting by default: this
+-- keeps the text crisp without the colored fringes (red/blue) that subpixel
+-- antialiasing always produces on LCD screens.
 --
--- On High DPI monitor or non RGB monitor you may consider using antialiasing grayscale instead.
--- The antialiasing grayscale with full hinting is interesting for crisp font rendering.
-style.font = renderer.font.load(DATADIR .. "/fonts/FiraSans-Regular.ttf", 15 * SCALE)
+-- You can override this per font or from your user configuration. If you
+-- prefer the sharper subpixel look and do not mind the fringes, use
+-- {antialiasing="subpixel", hinting="slight"}.
+local font_options = {antialiasing = "grayscale", hinting = "full"}
+style.font = renderer.font.load(DATADIR .. "/fonts/FiraSans-Regular.ttf", 15 * SCALE, font_options)
 style.big_font = style.font:copy(46 * SCALE)
-style.icon_font = renderer.font.load(DATADIR .. "/fonts/icons.ttf", 16 * SCALE, {antialiasing="grayscale", hinting="full"})
+style.icon_font = renderer.font.load(DATADIR .. "/fonts/icons.ttf", 16 * SCALE, font_options)
 style.icon_big_font = style.icon_font:copy(23 * SCALE)
-style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 15 * SCALE)
+style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 15 * SCALE, font_options)
 
 style.syntax = {}
 

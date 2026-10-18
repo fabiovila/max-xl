@@ -164,33 +164,45 @@ local style = require "core.style"
 
 ------------------------------- Fonts ----------------------------------------
 
--- customize fonts:
--- style.font = renderer.font.load(DATADIR .. "/fonts/FiraSans-Regular.ttf", 14 * SCALE)
--- style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 14 * SCALE)
+-- renderer.font.load accepts a 3rd argument table with the rendering options:
 --
--- DATADIR is the location of the installed Max XL Lua code, default color
--- schemes and fonts.
--- USERDIR is the location of the Max XL configuration directory.
+--   antialiasing : "subpixel" | "grayscale" | "none"
+--   hinting      : "slight"   | "full"      | "none"
+--   bold, italic, underline, smoothing, strikethrough : true | false
 --
--- font names used by lite:
--- style.font          : user interface
--- style.big_font      : big text in welcome screen
--- style.icon_font     : icons
--- style.icon_big_font : toolbar icons
--- style.code_font     : code
+-- Font roles used by the app:
+--   style.font          : user interface
+--   style.big_font      : big text in welcome screen
+--   style.icon_font     : icons
+--   style.icon_big_font : toolbar icons
+--   style.code_font     : code (also used by the embedded terminal)
 --
--- the function to load the font accept a 3rd optional argument like:
+-- DATADIR is the installed app data dir (fonts/colors); USERDIR is this
+-- configuration directory.
 --
--- {antialiasing="grayscale", hinting="full", bold=true, italic=true, underline=true, smoothing=true, strikethrough=true}
+-- Subpixel antialiasing ("subpixel") is sharper horizontally but ALWAYS
+-- paints colored fringes (red on one edge, blue on the other) -- that is how
+-- it works, not a bug. If those fringes bother you, use grayscale, which has
+-- no color fringing at all; "full" keeps it crisp.
 --
--- possible values are:
--- antialiasing: grayscale, subpixel
--- hinting: none, slight, full
--- bold: true, false
--- italic: true, false
--- underline: true, false
--- smoothing: true, false
--- strikethrough: true, false
+--   no color fringes : { antialiasing = "grayscale", hinting = "full" }
+--   colored fringes  : { antialiasing = "subpixel",  hinting = "slight" }
+--
+-- This is the default used by Max XL; adjust or comment out to taste.
+
+local TEXT = { antialiasing = "grayscale", hinting = "full" }
+
+style.font      = renderer.font.load(DATADIR .. "/fonts/FiraSans-Regular.ttf",      15 * SCALE, TEXT)
+style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 15 * SCALE, TEXT)
+
+-- copy() without options inherits the rendering options above, so the
+-- welcome screen and the sidebar panels pick up the same hinting.
+style.big_font = style.font:copy(46 * SCALE)
+
+-- Icons are monochrome: grayscale + full stays crisp without color fringes.
+style.icon_font = renderer.font.load(DATADIR .. "/fonts/icons.ttf", 16 * SCALE,
+  { antialiasing = "grayscale", hinting = "full" })
+style.icon_big_font = style.icon_font:copy(23 * SCALE)
 
 ------------------------------ Plugins ----------------------------------------
 
