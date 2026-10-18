@@ -549,6 +549,53 @@ core.add_thread(function()
     assert(not cview:is_running(), "console kill failed")
     log("console kill ok")
 
+    -- actions plugin (status bar buttons) --------------------------------------------
+    local actions = require "plugins.actions"
+    assert(actions and actions.reload and actions.run, "actions plugin missing")
+    assert(command.map["actions:reload"], "actions:reload command missing")
+    assert(command.map["actions:run"], "actions:run command missing")
+    do
+      local proj = core.root_project().path
+      local adir = proj .. "/.max-xl"
+      system.mkdir(adir)
+      local afp = io.open(adir .. "/actions.lua", "w")
+      assert(afp, "cannot write actions.lua")
+      afp:write([[
+return {
+  { label = "e2e-hello", command = "echo e2e-action-ok" },
+  { label = "e2e-right", command = "echo x", align = "right" },
+}
+]])
+      afp:close()
+      actions.reload()
+      local item = core.status_view:get_item("actions:e2e-hello")
+      assert(item, "action button not registered on the status bar")
+      assert(item.background_color, "action button has no background")
+      local ritem = core.status_view:get_item("actions:e2e-right")
+      assert(ritem, "right-aligned action button missing")
+      -- a shell action must be captured by the console
+      cview:clear()
+      actions.run({ label = "e2e-hello", command = "echo e2e-action-ok" })
+      wait_for(function()
+        return cview:get_text():find("e2e-action-ok", 1, true) ~= nil
+      end, "action output")
+      wait_for(function()
+        return cview:get_text():find("%[exit 0%]") ~= nil
+      end, "action exit status")
+      assert(cview:get_text():find("$ echo e2e-action-ok", 1, true),
+        "action command not echoed")
+      -- a Lua action must run without error
+      local okrun = pcall(actions.run, {
+        label = "e2e-lua", command = function() end,
+      })
+      assert(okrun, "lua action failed")
+      -- misconfigured actions must not raise
+      pcall(actions.run, { label = "e2e-none" })
+      os.remove(adir .. "/actions.lua")
+      actions.reload()
+    end
+    log("actions ok")
+
     -- terminal -----------------------------------------------------------------------
     local tview = require "plugins.terminal"
     assert(tview and tostring(tview) == "TerminalView", "terminal missing")

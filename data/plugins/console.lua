@@ -112,8 +112,12 @@ local function drain_to(view, stream)
   end
 end
 
-function ConsoleView:run(cmd)
+---Run a shell command and stream its output into the console.
+---@param cmd string
+---@param opts? { cwd?: string }
+function ConsoleView:run(cmd, opts)
   if not cmd or cmd == "" then return end
+  opts = opts or {}
   if self:is_running() then
     core.error("A command is already running (see Console)")
     return
@@ -127,7 +131,7 @@ function ConsoleView:run(cmd)
   end
   table.insert(hist, 1, cmd)
   while #hist > 50 do table.remove(hist) end
-  local cwd = core.root_project() and core.root_project().path or nil
+  local cwd = opts.cwd or (core.root_project() and core.root_project().path or nil)
   self:append("$ " .. cmd)
   self.follow = true
   if not self:is_open() then self:show() end

@@ -27,6 +27,9 @@ VS Code-style workflow:
 - **Git panel** (status, stage, commit) backed by the system `git`.
 - **Problems panel** (`Ctrl+Shift+M`).
 - **Integrated console** (`Ctrl+Alt+T`).
+- **Custom action buttons** in the status bar, configured from `actions.lua`
+  (user-wide or per project); clicking one runs a shell command and streams its
+  output into the console — handy for `make` targets.
 - **Embedded interactive terminal** in a bottom split, running your real shell
   (`fish`, `bash`, …) through a built-in PTY.
 - **Tab context menu**: close (left / right / others / all), duplicate to the
@@ -51,6 +54,29 @@ Plugins can also be bundled locally in `data/plugins/`.
 User configuration lives in `~/.config/max-xl/` (or `$LITE_USERDIR`), and
 per-project configuration can be placed in a `.max-xl/init.lua` file inside the
 project directory.
+
+### Action buttons
+
+The status bar can show buttons that run commands for you. Define them in a
+Lua file at either location (project entries are merged over the user ones):
+
+- `~/.config/max-xl/actions.lua` — user-wide.
+- `<project>/.max-xl/actions.lua` — per project.
+
+```lua
+-- ~/.config/max-xl/actions.lua
+return {
+  { label = "build", command = "make -j$(nproc)" },
+  { label = "run",   command = "make run", tooltip = "run the app" },
+  { label = "test",  command = "make test" },
+  { label = "clean", command = "make clean", align = "right" },
+}
+```
+
+Clicking a button runs the command in the project directory and streams its
+stdout, stderr and exit status into the console. Reload the buttons with
+`Ctrl+Alt+A` (or the `actions:reload` command). A `command` can also be a Lua
+function, and each button accepts `name`, `tooltip`, `cwd` and `align`.
 
 ## Quick Build Guide
 
