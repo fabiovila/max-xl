@@ -14,7 +14,7 @@
 #    is intentionally kept identical to upstream Lite XL.
 
 pkgname=max-xl-git
-pkgver=2.1.7.r2490.g1782e696
+pkgver=2.1.7.r2492.ga5d9c85
 pkgrel=1
 pkgdesc="A lightweight text editor written in Lua, forked from Lite XL, with a VS Code-style workflow"
 arch=('x86_64' 'aarch64')
@@ -24,6 +24,7 @@ depends=('sdl3' 'freetype2' 'pcre2' 'lua54')
 makedepends=('git' 'meson' 'ninja' 'pkgconf')
 provides=('max-xl')
 conflicts=('max-xl' 'lite-xl' 'lite-xl-git')
+options=('!debug')
 source=("$pkgname::git+$url.git")
 sha256sums=('SKIP')
 
