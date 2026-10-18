@@ -1,0 +1,57 @@
+# Maintainer: Fabio Vila <vilamail-spam@yahoo.com.br>
+#
+# Max XL - a fork of Lite XL with a VS Code-style workflow.
+# No tagged releases exist yet, so this is a rolling -git package.
+#
+# Build & install:
+#   cd packaging/arch
+#   makepkg -si
+#
+# Notes:
+#  * Lua is taken from the system (lua54) instead of the bundled wrap, so the
+#    package does not vendor a second copy of the interpreter.
+#  * The native plugin API (lite_xl_plugin_api.h / LITE_XL_* / luaopen_lite_xl_*)
+#    is intentionally kept identical to upstream Lite XL.
+
+pkgname=max-xl-git
+pkgver=2.1.7.r2490.g1782e696
+pkgrel=1
+pkgdesc="A lightweight text editor written in Lua, forked from Lite XL, with a VS Code-style workflow"
+arch=('x86_64' 'aarch64')
+url="https://github.com/fabiovila/max-xl"
+license=('MIT')
+depends=('sdl3' 'freetype2' 'pcre2' 'lua54')
+makedepends=('git' 'meson' 'ninja' 'pkgconf')
+provides=('max-xl')
+conflicts=('max-xl' 'lite-xl' 'lite-xl-git')
+source=("$pkgname::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$pkgname"
+  printf '2.1.7.r%s.g%s' \
+    "$(git rev-list --count HEAD)" \
+    "$(git rev-parse --short=7 HEAD)"
+}
+
+build() {
+  cd "$pkgname"
+  meson setup build \
+    --prefix=/usr \
+    --libdir=lib \
+    --buildtype=plain \
+    -Duse_system_lua=true \
+    --wrap-mode=nodownload
+  meson compile -C build
+}
+
+package() {
+  cd "$pkgname"
+  DESTDIR="$pkgdir" meson install -C build
+
+  # meson only installs the third-party notices from licenses/; ship the
+  # project LICENSE (with the preserved upstream copyrights) as well.
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+
+# vim:set sw=2 ts=2 et:

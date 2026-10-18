@@ -22,6 +22,11 @@ MaxXL*
 
 subprojects/.wraplock
 
+# Arch packaging build artifacts
+/packaging/arch/src/
+/packaging/arch/pkg/
+*.pkg.tar.zst
+
 !resources/windows/*.diff
 !resources/windows/*.exe.manifest.in
 !resources/macos/*.py
