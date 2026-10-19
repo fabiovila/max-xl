@@ -335,8 +335,16 @@ function core.init()
         if not ARGS[i]:match("^-psn") then
           local file_abs = common.is_absolute_path(arg_filename) and arg_filename or (system.absolute_path(".") .. PATHSEP .. common.normalize_path(arg_filename))
           if file_abs then
-            table.insert(files, file_abs)
-            project_dir = file_abs:match("^(.+)[/\\].+$")
+            if file_abs:match("%.maxxl$") then
+              -- A *.maxxl file is a workspace marker: open its directory as
+              -- the project (with the files in the treeview) instead of
+              -- opening the marker itself.
+              project_dir = file_abs:match("^(.+)[/\\].+$")
+              project_dir_explicit = true
+            else
+              table.insert(files, file_abs)
+              project_dir = file_abs:match("^(.+)[/\\].+$")
+            end
           end
         end
       end

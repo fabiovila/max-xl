@@ -1,0 +1,10 @@
+max-xl-workspace
+
+# Max XL workspace
+#
+# Este arquivo marca o diretório onde está como um workspace do Max XL.
+# Abra-o (duplo clique) para iniciar o Max XL com este diretório como
+# projeto e os arquivos dele na filetree.
+#
+# This file marks its directory as a Max XL workspace. Open it to launch
+# Max XL with this directory as the current project.

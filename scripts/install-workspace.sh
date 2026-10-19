@@ -21,7 +21,7 @@ install -m 644 "$src_dir/resources/linux/com.max_xl.MaxXL.workspace.xml" \
   "$data_home/mime/packages/com.max_xl.MaxXL.workspace.xml"
 install -m 644 "$src_dir/resources/linux/com.max_xl.MaxXL.workspace.desktop" \
   "$data_home/applications/com.max_xl.MaxXL.workspace.desktop"
-install -m 644 "$src_dir/resources/linux/max-xl-workspace.maxxl" \
+install -m 644 "$src_dir/resources/linux/workspace.maxxl" \
   "$templates/Max XL Workspace.maxxl"
 
 update-mime-database "$data_home/mime" 2>/dev/null || true
