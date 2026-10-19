@@ -78,6 +78,18 @@ stdout, stderr and exit status into the console. Reload the buttons with
 `Ctrl+Alt+A` (or the `actions:reload` command). A `command` can also be a Lua
 function, and each button accepts `name`, `tooltip`, `cwd` and `align`.
 
+### Workspace files
+
+A `*.maxxl` file marks its directory as a Max XL workspace. Opening it (double
+click) launches Max XL with that directory as the current project, so its files
+show up in the filetree — handy for turning any folder into a workspace without
+a terminal.
+
+`scripts/install-workspace.sh` registers the file association and drops a
+"Max XL Workspace" template into your templates folder (localized, e.g.
+`~/Modelos`). Then right-click a folder in your file manager, pick
+**New Document → Max XL Workspace**, and open the created file.
+
 ## Quick Build Guide
 
 To compile Max XL yourself, you must have the following dependencies installed
