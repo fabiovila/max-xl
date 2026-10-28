@@ -104,17 +104,18 @@ function ConsoleView:kill()
   self.proc = nil
 end
 
-local function drain_to(view, stream)
+local function drain_to(view, stream, on_line)
   while true do
     local ok, line = pcall(stream.read, stream, "*l", { timeout = 0.15 })
     if not ok or line == nil then break end
+    if on_line then pcall(on_line, line) end
     view:append(line)
   end
 end
 
 ---Run a shell command and stream its output into the console.
 ---@param cmd string
----@param opts? { cwd?: string }
+---@param opts? { cwd?: string, on_line?: fun(line: string), on_exit?: fun(code: integer|string|nil) }
 function ConsoleView:run(cmd, opts)
   if not cmd or cmd == "" then return end
   opts = opts or {}
@@ -144,17 +145,18 @@ function ConsoleView:run(cmd, opts)
     end
     self.proc = proc
     while proc:running() and self.run_id == my_id do
-      drain_to(self, proc.stdout)
-      drain_to(self, proc.stderr)
+      drain_to(self, proc.stdout, opts.on_line)
+      drain_to(self, proc.stderr, opts.on_line)
       coroutine.yield(0.05)
     end
     if self.run_id ~= my_id then return end
-    drain_to(self, proc.stdout)
-    drain_to(self, proc.stderr)
+    drain_to(self, proc.stdout, opts.on_line)
+    drain_to(self, proc.stderr, opts.on_line)
     local code = proc:wait(5)
     if self.run_id ~= my_id then return end
     self.proc = nil
     self:append(string.format("[exit %s]", tostring(code)))
+    if opts.on_exit then pcall(opts.on_exit, code) end
   end)
 end
 

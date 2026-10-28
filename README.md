@@ -25,7 +25,10 @@ VS Code-style workflow:
   problems views.
 - **Search panel** (project-wide find & replace).
 - **Git panel** (status, stage, commit) backed by the system `git`.
-- **Problems panel** (`Ctrl+Shift+M`).
+- **Problems panel** (`Ctrl+Shift+M`), fed by the built-in Lua linter and by
+  compiler output from build tasks.
+- **Build tasks** (`F7`) with GCC/Clang problem matching and `F8`/`Shift+F8`
+  navigation between problems.
 - **Integrated console** (`Ctrl+Alt+T`).
 - **Custom action buttons** in the status bar, configured from `actions.lua`
   (user-wide or per project); clicking one runs a shell command and streams its
@@ -125,6 +128,46 @@ selects everything. The mouse wheel scrolls the scrollback (a thin bar appears
 on the right edge), `Shift+PageUp`/`Shift+PageDown` scrolls a page,
 `Ctrl+Shift+Home`/`Ctrl+Shift+End` jumps to the top/bottom, and typing returns
 to the live prompt.
+
+### Build tasks
+
+`plugins/build.lua` runs commands and turns compiler output into clickable
+problems. Tasks live in `~/.config/max-xl/build.lua` and
+`<project>/.max-xl/build.lua` (the project file wins):
+
+```lua
+-- <project>/.max-xl/build.lua
+return {
+  build = { command = "make -j$(nproc)", default = true },
+  test  = { command = "ctest --test-dir build" },
+  clean = { command = "make clean", matcher = false },
+}
+```
+
+A list is accepted as well (`{ { name = "build", command = "…" }, … }`).
+Fields: `name`, `command`, `cwd` (relative to the project root), `default`
+(the task run by `F7`) and `matcher` — `"gcc"` by default, `false` to keep the
+output out of the Problems panel, or a `function(line, state)` returning
+`{ file, line, col, severity, message }`. When no `build.lua` exists, the
+buttons configured in `actions.lua` are reused.
+
+GCC/Clang diagnostics (`file:line:col: error|warning|note: message`) are
+collected while the command streams into the console. `make` *Entering
+directory* lines are followed, ANSI colours are stripped and duplicate lines
+and errors are dropped. When the task ends, the new diagnostics replace the old
+ones in the **Problems** panel (`Ctrl+Shift+M`); double clicking one jumps to
+the source. The status bar shows the result (`build: 2 error(s)`), and clicking
+it opens the problems — or reruns the build when there are none.
+
+| Key | Action |
+| --- | --- |
+| `F7` / `Ctrl+Shift+B` | Run the default build task |
+| `Shift+F7` | Pick a task |
+| `F8` / `Shift+F8` | Next / previous problem |
+| `Ctrl+Shift+M` | Toggle the Problems panel |
+
+`config.plugins.build.auto_open_problems = true` opens the panel when a build
+fails with diagnostics; `build:reload` re-reads the task files.
 
 ### Debugging (GDB)
 

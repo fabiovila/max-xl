@@ -237,6 +237,24 @@ style.icon_big_font = style.icon_font:copy(23 * SCALE)
 --   Wheel scrolls the history, Shift+PageUp/PageDown scrolls a page and
 --   Ctrl+Shift+Home/End jumps to the top/bottom. Typing returns to the tail.
 
+------------------------------- Build tasks -----------------------------------
+
+-- Build tasks run shell commands and feed compiler output into the Problems
+-- panel. They are read from <project>/.max-xl/build.lua (or USERDIR/build.lua,
+-- the project file wins). Without a build.lua the action buttons from
+-- actions.lua are reused. See README.md for the field reference.
+--
+-- config.plugins.build.auto_open_problems = true  -- open on failure
+-- config.plugins.build.default_task = "build"
+--
+-- <project>/.max-xl/build.lua:
+--   return {
+--     build = { command = "make -j$(nproc)", default = true },
+--     clean = { command = "make clean", matcher = false },
+--   }
+--
+-- Keys: F7 build, Shift+F7 pick a task, F8/Shift+F8 next/previous problem.
+
 ------------------------------- Debugging -------------------------------------
 
 -- The GDB frontend (plugins/gdb.lua + plugins/gdbui.lua) talks MI2 to GDB

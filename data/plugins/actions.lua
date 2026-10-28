@@ -162,6 +162,13 @@ function M.run(action)
 end
 
 
+---Return the currently loaded buttons (after the global/project merge).
+---@return table[]
+function M.get_actions()
+  return actions
+end
+
+
 ---Build the status bar item for a button.
 local function make_button(action)
   local side = action.align or config.plugins.actions.alignment

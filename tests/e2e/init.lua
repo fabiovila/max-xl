@@ -830,6 +830,129 @@ return {
       log("terminal follow-tail ok")
     end
 
+    -- Build tasks + problem matching ---------------------------------------
+    do
+      local build = require "plugins.build"
+      local problems = require "plugins.problems"
+
+      -- GCC/Clang output, make directory tracking and de-duplication
+      local st = build.new_state(FIX .. "/proj")
+      local lines = {
+        "In file included from src/main.c:1:",
+        "src/main.c:12:5: error: 'x' undeclared (first use in this function)",
+        "src/main.c:15:9: warning: unused variable 'y' [-Wunused-variable]",
+        "src/main.c:20:2: note: each undeclared identifier is reported only once",
+        "make[1]: Entering directory '/tmp/proj/sub'",
+        "sub.c:3:7: error: boom",
+        "make[1]: Leaving directory '/tmp/proj/sub'",
+        "make: *** [Makefile:5: build] Error 1",
+        "src/main.c:12:5: error: 'x' undeclared (first use in this function)",
+        "prog.c:42: undefined reference to 'foo'",
+      }
+      for _, line in ipairs(lines) do build.feed(st, line) end
+      assert(#st.items == 5, "expected 5 diagnostics, got " .. #st.items)
+      assert(st.items[1].file == FIX .. "/proj/src/main.c", st.items[1].file)
+      assert(st.items[1].line == 12 and st.items[1].col == 5, "wrong position")
+      assert(st.items[1].severity == "error", "wrong severity")
+      assert(st.items[2].severity == "warning", "warning not parsed")
+      assert(st.items[3].severity == "info", "note not parsed")
+      assert(st.items[4].file == "/tmp/proj/sub/sub.c", st.items[4].file)
+      assert(st.items[5].line == 42 and st.items[5].severity == "error",
+        "linker error not parsed")
+      log("build parser ok")
+
+      -- task definitions from USERDIR/build.lua
+      local fp = assert(io.open(USERDIR .. "/build.lua", "w"))
+      fp:write('return { e2e = { command = "true", default = true },'
+        .. ' other = { command = "true" } }\n')
+      fp:close()
+      build.reload()
+      assert(build.get_task("e2e"), "build.lua tasks not loaded")
+      assert(build.default_task().name == "e2e", "default task not selected")
+      assert(#build.get_tasks() == 2, "unexpected task count: " .. #build.get_tasks())
+      log("build tasks ok")
+
+      -- end-to-end: stream compiler output through the console
+      local dir = FIX .. "/build"
+      local cc
+      for d in (os.getenv("PATH") or ""):gmatch("[^:]+") do
+        if system.get_file_info(d .. "/cc") then cc = d .. "/cc" break end
+      end
+      if cc and system.get_file_info(dir .. "/bad.c") then
+        local console = require "plugins.console"
+        local function wait_for(fn, timeout)
+          local deadline = system.get_time() + timeout
+          while not fn() do
+            if system.get_time() > deadline then return false end
+            coroutine.yield(0.05)
+          end
+          return true
+        end
+
+        assert(build.run({ name = "e2e",
+          command = cc .. " -fsyntax-only bad.c", cwd = dir }),
+          "build did not start")
+        assert(wait_for(function()
+          local l = build.last()
+          return l and l.code ~= nil
+        end, 20), "build did not finish")
+        local n_err, n_items = 0, 0
+        for _, d in ipairs(problems.get()) do
+          if d.source == "build" then
+            n_items = n_items + 1
+            if d.severity == "error" then n_err = n_err + 1 end
+            assert(d.file == dir .. "/bad.c" and d.line == 1,
+              "diagnostic points to " .. tostring(d.file) .. ":" .. tostring(d.line))
+          end
+        end
+        -- GCC adds a "note:" right after the undeclared-identifier error.
+        assert(n_err == 1 and n_items == 2,
+          string.format("expected 1 error + 1 note, got %d/%d", n_err, n_items))
+        assert(build.last().code ~= 0, "failing command reported success")
+
+        assert(build.run({ name = "e2e",
+          command = cc .. " -fsyntax-only good.c", cwd = dir }),
+          "clean build did not start")
+        assert(wait_for(function()
+          local l = build.last()
+          return l and l.code == 0
+        end, 20), "clean build did not finish")
+        local n2 = 0
+        for _, d in ipairs(problems.get()) do
+          if d.source == "build" then n2 = n2 + 1 end
+        end
+        assert(n2 == 0, "clean build kept old diagnostics: " .. n2)
+        assert(not console:is_running(), "console still busy after the build")
+        log("build run ok")
+      else
+        log("build run skipped (no cc)")
+      end
+
+      -- F8 / Shift+F8 navigation over the problems of the active file
+      local notes = FIX .. "/lxtest/notes.txt"
+      if system.get_file_info(notes) then
+        problems.set("build", {
+          { file = notes, line = 2, col = 1, severity = "warning",
+            message = "w", source = "build" },
+          { file = notes, line = 4, col = 1, severity = "error",
+            message = "e", source = "build" },
+        })
+        local dv = core.root_view:open_doc(core.open_doc(notes))
+        dv.doc:set_selection(1, 1)
+        assert(problems.goto_relative(1), "next problem failed")
+        assert(dv.doc:get_selection() == 2, "F8 did not jump to line 2")
+        assert(problems.goto_relative(1), "second next problem failed")
+        assert(dv.doc:get_selection() == 4, "F8 did not jump to line 4")
+        assert(problems.goto_relative(1), "next problem wrap failed")
+        assert(dv.doc:get_selection() == 2, "F8 did not wrap")
+        assert(problems.goto_relative(-1), "previous problem failed")
+        assert(core.active_view.doc:get_selection() == 4,
+          "Shift+F8 did not wrap back")
+        problems.clear("build")
+        log("problems navigation ok")
+      end
+    end
+
     -- GDB integration ------------------------------------------------------
     do
       local gdb = require "plugins.gdb"

@@ -352,18 +352,96 @@ function ProblemsPanel:ensure_selected_visible()
 end
 
 function ProblemsPanel:open_selection()
-  local items = problems.get()
-  local d = items[self.selected]
+  return problems.open(problems.get()[self.selected])
+end
+
+---Open a diagnostic in the editor (file, line, column).
+---@param d plugins.problems.diagnostic
+---@return boolean success
+function problems.open(d)
   if not d then return false end
   return core.try(function()
     local dv = core.root_view:open_doc(core.open_doc(d.file))
     core.root_view.root_node:update_layout()
-    local line = common.clamp(d.line, 1, #dv.doc.lines)
-    local col = common.clamp(d.col or 1, 1, #dv.doc.lines[line])
+    local line = common.clamp(d.line or 1, 1, #dv.doc.lines)
+    -- Allow the position right after the last character (end of line).
+    local col = common.clamp(d.col or 1, 1, #dv.doc.lines[line] + 1)
     dv.doc:set_selection(line, col)
     dv:scroll_to_line(line, true)
   end)
 end
+
+
+---Diagnostics ordered by file and line (navigation order, unlike `get`,
+---which sorts by severity first).
+---@return plugins.problems.diagnostic[]
+function problems.navigation_order()
+  local items = problems.get()
+  table.sort(items, function(a, b)
+    if a.file ~= b.file then return a.file < b.file end
+    if a.line ~= b.line then return a.line < b.line end
+    return (a.col or 0) < (b.col or 0)
+  end)
+  return items
+end
+
+
+---Jump to the next (`delta` > 0) or previous (`delta` < 0) diagnostic,
+---starting from the cursor of the active document. Wraps around.
+---@param delta integer
+---@return boolean success
+function problems.goto_relative(delta)
+  local items = problems.navigation_order()
+  if #items == 0 then
+    core.log_quiet("No problems")
+    return false
+  end
+
+  local file, line, col
+  local av = core.active_view
+  if av and av.doc then
+    file = av.doc.abs_filename or av.doc.filename
+    line, col = av.doc:get_selection()
+  end
+
+  -- Last diagnostic at/before and strictly before the cursor
+  -- (navigation_order is sorted). With no known position, start from either
+  -- end so the first jump lands on the first (or last) item.
+  local at_cursor, before_cursor = 0, 0
+  if file then
+    for i, d in ipairs(items) do
+      local cmp
+      if d.file ~= file then
+        cmp = d.file < file and -1 or 1
+      elseif d.line ~= line then
+        cmp = d.line < line and -1 or 1
+      else
+        local dc = d.col or 1
+        cmp = dc == col and 0 or (dc < col and -1 or 1)
+      end
+      if cmp > 0 then break end
+      at_cursor = i
+      if cmp < 0 then before_cursor = i end
+    end
+  end
+
+  local idx
+  if delta > 0 then
+    idx = at_cursor + 1
+    if idx > #items then idx = 1 end
+  else
+    idx = before_cursor
+    if idx < 1 then idx = #items end
+  end
+  local d = items[idx]
+  if not problems.open(d) then return false end
+  if core.status_view and core.status_view.show_message then
+    core.status_view:show_message("!", style.warn,
+      string.format("Problem %d of %d: %s", idx, #items, d.message))
+  end
+  return true
+end
+
 
 -- Mouse ---------------------------------------------------------------------
 
@@ -458,6 +536,8 @@ local function panel_visible() return view.visible end
 command.add(nil, {
   ["problems-panel:toggle"] = function() view:toggle() end,
   ["problems-panel:show"] = function() view:show() end,
+  ["problems:next"] = function() problems.goto_relative(1) end,
+  ["problems:previous"] = function() problems.goto_relative(-1) end,
 })
 
 command.add(panel_visible, {
@@ -491,6 +571,8 @@ keymap.add {
   ["up"] = "problems-panel:up",
   ["down"] = "problems-panel:down",
   ["return"] = "problems-panel:open",
+  ["f8"] = "problems:next",
+  ["shift+f8"] = "problems:previous",
 }
 
 -- Register the problems button on the activity bar (panel selector).

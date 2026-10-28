@@ -49,6 +49,18 @@ CEOF
   cc -g -O0 -o "$FIX/gdb/prog" "$FIX/gdb/prog.c"
 fi
 
+# Build-task fixtures (compiler diagnostics) --------------------------------
+if command -v cc >/dev/null 2>&1; then
+  mkdir -p "$FIX/build"
+  cat > "$FIX/build/bad.c" <<'CEOF'
+int helper(void) { return missing_symbol; }
+int main(void) { return helper(); }
+CEOF
+  cat > "$FIX/build/good.c" <<'CEOF'
+int main(void) { return 0; }
+CEOF
+fi
+
 # ARM freestanding program used by the remote (QEMU gdbstub) test.
 if command -v arm-none-eabi-gcc >/dev/null 2>&1; then
   mkdir -p "$FIX/gdbarm"
