@@ -104,6 +104,16 @@ config.plugins.terminal.font_options = { antialiasing = "grayscale", hinting = "
 config.plugins.terminal.padding = { x = 10, y = 8 }  -- inner margin
 config.plugins.terminal.scrollback = 1000            -- history rows
 
+-- Glyphs missing from the font (the ✓/✗ that fish prompts print, box
+-- drawing characters, …) come from this fallback chain. Missing files are
+-- skipped; set the whole list to false to disable it.
+config.plugins.terminal.font_fallback = {
+  "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+  "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf",
+  "/usr/share/fonts/noto/NotoSansSymbols-Regular.ttf",
+  "/usr/share/fonts/TTF/DejaVuSans.ttf",
+}
+
 -- Tip: GTK terminals show point sizes ("Monospace 14"); at 96 DPI that is
 -- 14 * 96 / 72 = 18.7px, so use ~19 here for the same glyph size.
 -- `fc-match Monospace` reveals which file a family name uses.

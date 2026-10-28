@@ -759,6 +759,17 @@ return {
       local tfont = tv7:get_font()
       assert(tfont and tfont ~= style.code_font, "terminal font not loaded from path")
       assert(tfont:get_height() > 0, "terminal font has no height")
+      -- missing glyphs (✓/✗ in fish prompts) are served by a fallback group
+      local old_fallback = pcfg.font_fallback
+      pcfg.font_fallback = { pcfg.font }
+      local grouped = tv7:get_font()
+      local paths = grouped and grouped:get_path()
+      assert(type(paths) == "table" and #paths == 2,
+        "font fallback group not created: " .. tostring(paths))
+      pcfg.font_fallback = false
+      local plain = tv7:get_font()
+      assert(type(plain) == "userdata", "font fallback could not be disabled")
+      pcfg.font_fallback = old_fallback
       pcfg.font, pcfg.font_size, pcfg.font_options = old_font, old_size, old_opts
       local padx, pady = tv7:get_padding()
       assert(padx > 0 and pady > 0, "terminal padding default missing")

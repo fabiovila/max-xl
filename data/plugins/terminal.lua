@@ -17,6 +17,15 @@ config.plugins.terminal = common.merge({
   font_size = 15,
   -- Rendering options for a font loaded from a path.
   font_options = { antialiasing = "grayscale", hinting = "full" },
+  -- Fonts tried (in order) for glyphs missing from `font`, e.g. the ✓/✗ that
+  -- fish prompts print. Only paths that exist are loaded. Set to false to
+  -- disable the fallback chain.
+  font_fallback = {
+    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+    "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf",
+    "/usr/share/fonts/noto/NotoSansSymbols-Regular.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+  },
   -- Inner margin between the view edges and the grid, in SCALE units.
   padding = { x = 10, y = 8 },
   -- Rows scrolled per mouse wheel notch.
@@ -122,29 +131,69 @@ function TerminalView:get_text()
   return table.concat(out, "\n")
 end
 
+local function load_font_file(path, size, opts)
+  local ok, font = pcall(renderer.font.load, path, size, opts)
+  if ok and font then return font end
+  return nil
+end
+
+local function font_file_exists(path)
+  return system.get_file_info(path) ~= nil
+end
+
+-- Resolve the configured font. When possible it is wrapped in a renderer font
+-- group with fallback fonts, so glyphs the main font lacks (the ✓/✗ printed
+-- by fish prompts, box drawing, emoji-ish symbols) do not render as tofu.
 function TerminalView:get_font()
   local cfg = config.plugins.terminal
   local font = cfg.font
   if type(font) == "table" then return font end
-  if type(font) == "string" and font ~= "" then
-    local size = common.round((cfg.font_size or 15) * SCALE)
-    local opts = cfg.font_options or DEFAULT_FONT_OPTIONS
-    local key = string.format("%s|%d|%s|%s", font, size,
-      tostring(opts.antialiasing), tostring(opts.hinting))
-    local loaded = font_cache[key]
-    if not loaded then
-      local ok, res = pcall(renderer.font.load, font, size, opts)
-      if ok and res then
-        loaded = res
-      else
-        core.log("Terminal: could not load font '%s', using the code font", font)
-        loaded = false
-      end
-      font_cache[key] = loaded
-    end
-    return loaded or style.code_font
+
+  local from_path = type(font) == "string" and font ~= ""
+  local size, opts, label
+  if from_path then
+    size = common.round((cfg.font_size or 15) * SCALE)
+    opts = cfg.font_options or DEFAULT_FONT_OPTIONS
+    label = font
+  else
+    font = style.code_font
+    if type(font) == "table" then return font end -- theme already grouped it
+    size = font:get_size()
+    opts = DEFAULT_FONT_OPTIONS
+    label = tostring(font)
   end
-  return style.code_font
+
+  local fallbacks = {}
+  if cfg.font_fallback ~= false then
+    for _, path in ipairs(cfg.font_fallback or {}) do
+      if font_file_exists(path) then fallbacks[#fallbacks + 1] = path end
+    end
+  end
+
+  local key = string.format("%s|%s|%s|%s|%s", label, tostring(size),
+    tostring(opts.antialiasing), tostring(opts.hinting),
+    table.concat(fallbacks, ","))
+  local cached = font_cache[key]
+  if cached ~= nil then return cached or style.code_font end
+
+  local primary = font
+  if from_path then
+    primary = load_font_file(font, size, opts)
+    if not primary then
+      core.log("Terminal: could not load font '%s', using the code font", font)
+      primary = style.code_font
+      size = primary:get_size()
+    end
+  end
+
+  local group = { primary }
+  for _, path in ipairs(fallbacks) do
+    local fallback = load_font_file(path, size, opts)
+    if fallback then group[#group + 1] = fallback end
+  end
+  local resolved = #group > 1 and renderer.font.group(group) or primary
+  font_cache[key] = resolved or false
+  return resolved
 end
 
 function TerminalView:get_row_height()

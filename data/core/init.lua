@@ -215,6 +215,16 @@ style.icon_big_font = style.icon_font:copy(23 * SCALE)
 --   config.plugins.terminal.font_size = 14
 --   config.plugins.terminal.font_options = { antialiasing = "grayscale", hinting = "full" }
 --
+-- Glyphs missing from that font (e.g. the ✓/✗ of fish prompts) are taken
+-- from a fallback chain. Paths are tried in order; missing files are
+-- skipped. Set to false to disable:
+--   config.plugins.terminal.font_fallback = {
+--     "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+--     "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf",
+--     "/usr/share/fonts/noto/NotoSansSymbols-Regular.ttf",
+--     "/usr/share/fonts/TTF/DejaVuSans.ttf",
+--   }
+--
 -- Inner margin between the view borders and the text (SCALE units):
 --   config.plugins.terminal.padding = { x = 10, y = 8 }
 --
