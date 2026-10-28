@@ -748,6 +748,77 @@ return {
     end
     log("terminal erase ok")
 
+    -- terminal font, padding, selection and scrollback ----------------------
+    do
+      local tv7 = require "plugins.terminal"
+      local pcfg = require("core.config").plugins.terminal
+      local old_font, old_size, old_opts = pcfg.font, pcfg.font_size, pcfg.font_options
+      pcfg.font = DATADIR .. "/fonts/JetBrainsMono-Regular.ttf"
+      pcfg.font_size = 17
+      pcfg.font_options = { antialiasing = "grayscale", hinting = "full" }
+      local tfont = tv7:get_font()
+      assert(tfont and tfont ~= style.code_font, "terminal font not loaded from path")
+      assert(tfont:get_height() > 0, "terminal font has no height")
+      pcfg.font, pcfg.font_size, pcfg.font_options = old_font, old_size, old_opts
+      local padx, pady = tv7:get_padding()
+      assert(padx > 0 and pady > 0, "terminal padding default missing")
+      log("terminal font/padding ok")
+
+      tv7.lines = {}
+      for i = 1, 300 do
+        local row = tv7:blank_row()
+        local text = "line-" .. i
+        for c = 1, #text do row.ch[c] = text:sub(c, c) end
+        table.insert(tv7.lines, row)
+      end
+      tv7.cx, tv7.cy = 1, 300
+      tv7.view_top, tv7.sel = nil, nil
+      local max_top = tv7:get_max_view_top()
+      assert(max_top > 1, "scrollback not scrollable: " .. max_top)
+      assert(tv7:get_view_top() == max_top, "view not following the tail")
+      tv7:scroll_by(5)
+      assert(tv7.view_top == max_top - 5,
+        "scroll_by wrong top: " .. tostring(tv7.view_top))
+      tv7:scroll_to_bottom()
+      assert(tv7.view_top == nil, "scroll_to_bottom did not follow tail")
+      tv7:set_view_top(1)
+      assert(tv7:get_view_top() == 1, "scroll_to_top failed")
+      tv7:scroll_to_bottom()
+      log("terminal scrollback ok")
+
+      -- forward selection across lines trims trailing spaces
+      tv7.sel = { 3, 3, 4, 2 }
+      assert(tv7:get_selection_text() == "ne-3\nli",
+        "selection text wrong: " .. string.format("%q", tv7:get_selection_text()))
+      local from, to = tv7:get_selection_span(4)
+      assert(from == 1 and to == 2, "selection span wrong")
+      -- backward drags must yield the same text
+      tv7.sel = { 4, 2, 3, 3 }
+      assert(tv7:get_selection_text() == "ne-3\nli", "reverse selection text wrong")
+      tv7:select_word(7, 2)
+      assert(tv7:get_selection_text() == "line-7",
+        "word selection wrong: " .. string.format("%q", tv7:get_selection_text()))
+      tv7:select_line(9)
+      assert(tv7:get_selection_text() == "line-9", "line selection wrong")
+      tv7:select_all()
+      local all = tv7:get_selection_text()
+      assert(all:find("line%-1\n", 1) and all:find("line%-300$"),
+        "select all wrong")
+      tv7:select_word(10, 2)
+      assert(tv7:copy_selection(), "copy_selection failed")
+      assert(system.get_clipboard() == "line-10", "clipboard content wrong")
+      log("terminal selection ok")
+
+      -- new output must not yank a scrolled-up view, typing must return to tail
+      tv7:set_view_top(10)
+      local before = tv7.view_top
+      tv7:parse("Z")
+      assert(tv7.view_top == before, "output moved the scrolled view")
+      tv7:on_text_input("q")
+      assert(tv7.view_top == nil, "typing did not return to the tail")
+      log("terminal follow-tail ok")
+    end
+
     panel:hide(true)
     assert(not panel.visible, "panel still visible")
     log("ALL E2E PASS")

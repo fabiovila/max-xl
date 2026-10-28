@@ -31,7 +31,8 @@ VS Code-style workflow:
   (user-wide or per project); clicking one runs a shell command and streams its
   output into the console — handy for `make` targets.
 - **Embedded interactive terminal** in a bottom split, running your real shell
-  (`fish`, `bash`, …) through a built-in PTY.
+  (`fish`, `bash`, …) through a built-in PTY, with scrollback, mouse selection
+  and clipboard copy (`Ctrl+Shift+C`).
 - **Tab context menu**: close (left / right / others / all), duplicate to the
   right or below, move, save, copy path / relative path and reveal.
 - Empty panes are pruned automatically, and the layout can be reset from the
@@ -89,6 +90,31 @@ a terminal.
 "Max XL Workspace" template into your templates folder (localized, e.g.
 `~/Modelos`). Then right-click a folder in your file manager, pick
 **New Document → Max XL Workspace**, and open the created file.
+
+### Terminal
+
+The embedded terminal uses the editor's code font unless you give it its own.
+In `~/.config/max-xl/init.lua`:
+
+```lua
+-- `font` accepts a TTF path or a renderer.font object; sizes are in pixels.
+config.plugins.terminal.font = "/usr/share/fonts/noto/NotoSansMono-Regular.ttf"
+config.plugins.terminal.font_size = 14
+config.plugins.terminal.font_options = { antialiasing = "grayscale", hinting = "full" }
+config.plugins.terminal.padding = { x = 10, y = 8 }  -- inner margin
+config.plugins.terminal.scrollback = 1000            -- history rows
+
+-- Tip: GTK terminals show point sizes ("Monospace 14"); at 96 DPI that is
+-- 14 * 96 / 72 = 18.7px, so use ~19 here for the same glyph size.
+-- `fc-match Monospace` reveals which file a family name uses.
+```
+
+Select text by dragging, double click for a word and triple click for a line;
+`Shift+click` extends the selection. `Ctrl+Shift+C` copies and `Ctrl+Shift+A`
+selects everything. The mouse wheel scrolls the scrollback (a thin bar appears
+on the right edge), `Shift+PageUp`/`Shift+PageDown` scrolls a page,
+`Ctrl+Shift+Home`/`Ctrl+Shift+End` jumps to the top/bottom, and typing returns
+to the live prompt.
 
 ## Quick Build Guide
 

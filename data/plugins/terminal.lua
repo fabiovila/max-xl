@@ -9,7 +9,22 @@ local View = require "core.view"
 
 config.plugins.terminal = common.merge({
   scrollback = 1000,
+  -- Font used by the terminal grid. Either a path to a monospace .ttf or a
+  -- renderer.font object (see renderer.font.load). When nil the view falls
+  -- back to style.code_font, so themes/scale still apply.
+  font = nil,
+  -- Only used when `font` is a path; multiplied by SCALE like style fonts.
+  font_size = 15,
+  -- Rendering options for a font loaded from a path.
+  font_options = { antialiasing = "grayscale", hinting = "full" },
+  -- Inner margin between the view edges and the grid, in SCALE units.
+  padding = { x = 10, y = 8 },
+  -- Rows scrolled per mouse wheel notch.
+  scroll_wheel_rows = 3,
 }, config.plugins.terminal)
+
+local DEFAULT_FONT_OPTIONS = { antialiasing = "grayscale", hinting = "full" }
+local font_cache = {}
 
 local has_pty = pcall(function() return pty end)
 if not has_pty then
@@ -70,7 +85,10 @@ function TerminalView:new()
   self.region_top, self.region_bottom = 1, 24
   self.alt = nil
   self.carry = ""
-  self.view_y = 0
+  self.view_top = nil -- nil = follow the tail; number = first visible line
+  self.sel = nil -- { line1, col1, line2, col2 } inclusive cell coordinates
+  self.mouse_selecting = nil
+  self.scrollbar_dragging = false
   self.osc_title = nil
   self.exit_code = nil
   self.started = false
@@ -104,8 +122,111 @@ function TerminalView:get_text()
   return table.concat(out, "\n")
 end
 
+function TerminalView:get_font()
+  local cfg = config.plugins.terminal
+  local font = cfg.font
+  if type(font) == "table" then return font end
+  if type(font) == "string" and font ~= "" then
+    local size = common.round((cfg.font_size or 15) * SCALE)
+    local opts = cfg.font_options or DEFAULT_FONT_OPTIONS
+    local key = string.format("%s|%d|%s|%s", font, size,
+      tostring(opts.antialiasing), tostring(opts.hinting))
+    local loaded = font_cache[key]
+    if not loaded then
+      local ok, res = pcall(renderer.font.load, font, size, opts)
+      if ok and res then
+        loaded = res
+      else
+        core.log("Terminal: could not load font '%s', using the code font", font)
+        loaded = false
+      end
+      font_cache[key] = loaded
+    end
+    return loaded or style.code_font
+  end
+  return style.code_font
+end
+
 function TerminalView:get_row_height()
-  return style.code_font:get_height()
+  return self:get_font():get_height()
+end
+
+function TerminalView:get_char_width()
+  return self:get_font():get_width("M")
+end
+
+function TerminalView:get_padding()
+  local pad = config.plugins.terminal.padding
+  if type(pad) == "number" then pad = { x = pad, y = pad } end
+  pad = pad or {}
+  return common.round((pad.x or 0) * SCALE), common.round((pad.y or 0) * SCALE)
+end
+
+-- Area actually used by the character grid (the view minus the inner margin).
+function TerminalView:get_grid_bounds()
+  local padx, pady = self:get_padding()
+  local w = math.max(1, self.size.x - padx * 2)
+  local h = math.max(1, self.size.y - pady * 2)
+  return common.round(self.position.x + padx), common.round(self.position.y + pady), w, h
+end
+
+function TerminalView:get_visible_rows()
+  local _, _, _, h = self:get_grid_bounds()
+  return math.max(1, math.floor(h / self:get_row_height()))
+end
+
+function TerminalView:get_visible_cols()
+  local _, _, w = self:get_grid_bounds()
+  return math.max(1, math.floor(w / self:get_char_width()))
+end
+
+function TerminalView:get_max_view_top()
+  return math.max(1, #self.lines - self:get_visible_rows() + 1)
+end
+
+-- top line of the viewport; nil means "follow the tail"
+function TerminalView:get_view_top()
+  if self.view_top == nil then return self:get_max_view_top() end
+  return common.clamp(self.view_top, 1, self:get_max_view_top())
+end
+
+function TerminalView:set_view_top(top)
+  local max_top = self:get_max_view_top()
+  top = common.clamp(math.floor(top), 1, max_top)
+  self.view_top = top >= max_top and nil or top
+  core.redraw = true
+end
+
+function TerminalView:scroll_by(rows)
+  local max_top = self:get_max_view_top()
+  local top = self:get_view_top()
+  self:set_view_top(top - rows)
+  return max_top > 1
+end
+
+function TerminalView:scroll_to_bottom()
+  if self.view_top ~= nil then
+    self.view_top = nil
+    core.redraw = true
+  end
+end
+
+function TerminalView:get_view_range()
+  local total = #self.lines
+  if total == 0 then return 1, 0 end
+  local vis = self:get_visible_rows()
+  if total <= vis then return 1, total end
+  local first = self:get_view_top()
+  return first, math.min(total, first + vis - 1)
+end
+
+-- Pixel origin of the visible grid chunk. Short buffers are bottom-aligned
+-- so a fresh prompt sits at the bottom of the view, like a real terminal.
+function TerminalView:get_grid_origin()
+  local gx, gy, _, gh = self:get_grid_bounds()
+  local first, last = self:get_view_range()
+  local rows = math.max(1, last - first + 1)
+  return gx, common.round(gy + gh - rows * self:get_row_height())
 end
 
 function TerminalView:get_scrollable_size()
@@ -146,11 +267,24 @@ end
 
 function TerminalView:trim_buffer()
   local cap = self.rows + (config.plugins.terminal.scrollback or 1000)
+  local removed = 0
   while #self.lines > cap do
     table.remove(self.lines, 1)
     self.cy = self.cy - 1
+    removed = removed + 1
   end
   if self.cy < 1 then self.cy = 1 end
+  -- keep the same absolute lines in view when old scrollback is dropped
+  if removed > 0 and self.view_top then
+    self.view_top = self.view_top - removed
+    if self.view_top < 1 then self.view_top = 1 end
+    if self.view_top >= self:get_max_view_top() then self.view_top = nil end
+  end
+  -- selected cells move up with the buffer
+  if removed > 0 and self.sel then
+    self.sel[1], self.sel[3] = self.sel[1] - removed, self.sel[3] - removed
+    if self.sel[1] < 1 or self.sel[3] < 1 then self.sel = nil end
+  end
 end
 
 function TerminalView:scroll_up(rs, re, n)
@@ -463,7 +597,8 @@ function TerminalView:handle_mode(private, params, set)
           self.fg, self.bg, self.bold = nil, nil, false
           self.region_top, self.region_bottom = 1, self.rows
           self.pending_wrap = false
-          self.view_y = 0
+          self.view_top = nil
+          self.sel = nil
         end
       elseif self.alt then
         local a = self.alt
@@ -611,7 +746,7 @@ function TerminalView:parse(data)
   end
   -- bound a runaway carry (unterminated escape sequence)
   if #self.carry > 4096 then self.carry = "" end
-  if self.view_y == 0 then core.redraw = true end
+  core.redraw = true
 end
 
 function TerminalView:pump()
@@ -646,7 +781,10 @@ function TerminalView:start(cmd)
   self.cx, self.cy = 1, 1
   self.alt = nil
   self.carry = ""
-  self.view_y = 0
+  self.view_top = nil
+  self.sel = nil
+  self.mouse_selecting = nil
+  self.scrollbar_dragging = false
   self.osc_title = nil
   self.fg, self.bg, self.bold = nil, nil, false
   self.region_top, self.region_bottom = 1, self.rows
@@ -711,8 +849,15 @@ function TerminalView:resize(cols, rows)
   local dss = new_ss - old_ss
   self.cy = common.clamp(self.cy + math.max(dss, 0), new_ss, #self.lines)
   self.pending_wrap = false
-  -- pin to live tail so content doesn't jump around on resize
-  self.view_y = 0
+  -- keep a scrollback position stable; follow mode stays pinned to the tail
+  if self.view_top then
+    local max_top = self:get_max_view_top()
+    if self.view_top >= max_top then
+      self.view_top = nil
+    else
+      self.view_top = common.clamp(self.view_top, 1, max_top)
+    end
+  end
   if self.pty then pcall(function() self.pty:resize(cols, rows) end) end
 end
 
@@ -727,56 +872,228 @@ function TerminalView:update()
     end
     core.blink_timer = tb
   end
-  local row_h = self:get_row_height()
-  local cols = math.max(1, math.floor(self.size.x / style.code_font:get_width("M")))
-  local rows = math.max(1, math.floor(self.size.y / row_h))
-  if (cols ~= self.cols or rows ~= self.rows) and self.size.x > 0 then
+  if self.view_top and self.view_top >= self:get_max_view_top() then
+    self.view_top = nil
+  end
+  local cols = self:get_visible_cols()
+  local rows = self:get_visible_rows()
+  if (cols ~= self.cols or rows ~= self.rows)
+      and self.size.x > 0 and self.size.y > 0 then
     self:resize(cols, rows)
   end
 end
 
 -- Drawing ---------------------------------------------------------------------
 
+-- Selection is stored as two inclusive cell coordinates; sort them so a drag
+-- in any direction yields the same text.
+local function sorted_selection(sel)
+  local l1, c1, l2, c2 = sel[1], sel[2], sel[3], sel[4]
+  if l2 < l1 or (l2 == l1 and c2 < c1) then
+    return l2, c2, l1, c1
+  end
+  return l1, c1, l2, c2
+end
+
+function TerminalView:get_selection_span(line)
+  if not self.sel then return nil end
+  local l1, c1, l2, c2 = sorted_selection(self.sel)
+  if line < l1 or line > l2 then return nil end
+  local from = line == l1 and c1 or 1
+  local to = line == l2 and c2 or self.cols
+  return from, to
+end
+
+function TerminalView:get_selection_text()
+  if not self.sel then return "" end
+  local l1, c1, l2, c2 = sorted_selection(self.sel)
+  local out = {}
+  for line = l1, l2 do
+    local row = self.lines[line]
+    local text = ""
+    if row then
+      local from = line == l1 and c1 or 1
+      local to = math.min(line == l2 and c2 or #row.ch, #row.ch)
+      local chars = {}
+      for c = from, to do chars[#chars + 1] = row.ch[c] or " " end
+      text = table.concat(chars):gsub("%s+$", "")
+    end
+    out[#out + 1] = text
+  end
+  return table.concat(out, "\n")
+end
+
+function TerminalView:clear_selection()
+  if self.sel then
+    self.sel = nil
+    core.redraw = true
+  end
+end
+
+function TerminalView:copy_selection()
+  local text = self:get_selection_text()
+  if text == "" then
+    if core.status_view then
+      core.status_view:show_message("!", style.dim, "Nothing selected")
+    end
+    return false
+  end
+  system.set_clipboard(text)
+  if core.status_view then
+    core.status_view:show_message("i", style.accent, "Copied to clipboard")
+  end
+  return true
+end
+
+function TerminalView:select_line(line)
+  if #self.lines == 0 then return end
+  line = common.clamp(line, 1, #self.lines)
+  local row = self.lines[line]
+  self.sel = { line, 1, line, math.max(1, row and #row.ch or 1) }
+  core.redraw = true
+end
+
+function TerminalView:select_word(line, col)
+  local row = self.lines[line]
+  if not row or #row.ch == 0 then return self:select_line(line) end
+  if col > #row.ch then
+    -- clicked past the end of a line: select the last word
+    col = #row.ch
+  end
+  local function is_word(c) return c ~= nil and c ~= " " and c ~= "\t" end
+  if not is_word(row.ch[col]) then
+    self.sel = { line, col, line, col }
+    core.redraw = true
+    return
+  end
+  local from, to = col, col
+  while from > 1 and is_word(row.ch[from - 1]) do from = from - 1 end
+  while to < #row.ch and is_word(row.ch[to + 1]) do to = to + 1 end
+  self.sel = { line, from, line, to }
+  core.redraw = true
+end
+
+function TerminalView:select_all()
+  local last = #self.lines
+  if last < 1 then return end
+  while last > 1 and #self.lines[last].ch == 0 do last = last - 1 end
+  self.sel = { 1, 1, last, math.max(1, #self.lines[last].ch) }
+  core.redraw = true
+end
+
+-- Map a screen point to a cell in the visible window.
+function TerminalView:resolve_position(x, y)
+  local gx, top = self:get_grid_origin()
+  local row_h = self:get_row_height()
+  local char_w = self:get_char_width()
+  local first, last = self:get_view_range()
+  local line = first + math.floor((y - top) / row_h)
+  line = common.clamp(line, first, math.max(first, last))
+  local col = math.floor((x - gx) / char_w) + 1
+  col = common.clamp(col, 1, self.cols)
+  return line, col
+end
+
+function TerminalView:get_scrollbar_rect()
+  local total, vis = #self.lines, self:get_visible_rows()
+  if total <= vis then return nil end
+  local padx, pady = self:get_padding()
+  local w = math.max(common.round(4 * SCALE), 2)
+  local margin = math.max(common.round(2 * SCALE),
+    padx - w - common.round(2 * SCALE))
+  local x = common.round(self.position.x + self.size.x - margin - w)
+  local y = common.round(self.position.y + pady)
+  local h = common.round(self.size.y - pady * 2)
+  if h <= 0 then return nil end
+  return { x = x, y = y, w = w, h = h }
+end
+
+function TerminalView:get_scrollbar_thumb()
+  local r = self:get_scrollbar_rect()
+  if not r then return nil end
+  local total, vis = #self.lines, self:get_visible_rows()
+  local thumb_h = math.max(common.round(20 * SCALE), math.floor(r.h * vis / total))
+  thumb_h = math.min(thumb_h, r.h)
+  local max_top = self:get_max_view_top()
+  local ratio = max_top > 1 and (self:get_view_top() - 1) / (max_top - 1) or 0
+  local thumb_y = common.round(r.y + (r.h - thumb_h) * ratio)
+  return { x = r.x, y = thumb_y, w = r.w, h = thumb_h }
+end
+
+function TerminalView:draw_scrollbar()
+  local track = self:get_scrollbar_rect()
+  if not track then return end
+  local thumb = self:get_scrollbar_thumb()
+  local C = self.C or style.panel_theme()
+  local base = C.dim or style.dim
+  local color = (self.scrollbar_dragging or self.scrollbar_hover) and style.accent or base
+  core.push_clip_rect(self.position.x, self.position.y, self.size.x, self.size.y)
+  renderer.draw_rect(track.x, track.y, track.w, track.h,
+    { base[1], base[2], base[3], 40 })
+  renderer.draw_rect(thumb.x, thumb.y, thumb.w, thumb.h, color)
+  core.pop_clip_rect()
+end
+
+function TerminalView:scrollbar_overlaps_point(x, y)
+  local r = self:get_scrollbar_rect()
+  if not r then return false end
+  local slack = common.round(2 * SCALE)
+  return x >= r.x - slack and x <= r.x + r.w + slack
+    and y >= r.y and y <= r.y + r.h
+end
+
+function TerminalView:scrollbar_drag_to(y)
+  local r = self:get_scrollbar_rect()
+  local thumb = self:get_scrollbar_thumb()
+  if not r or not thumb then return end
+  local offset = self.scrollbar_drag_offset or thumb.h / 2
+  local top_y = common.clamp(y - offset, r.y, r.y + r.h - thumb.h)
+  local ratio = (top_y - r.y) / math.max(1, r.h - thumb.h)
+  self:set_view_top(1 + ratio * (self:get_max_view_top() - 1))
+end
+
 function TerminalView:draw()
   self.C = style.panel_theme()
   local C = self.C
   self:draw_background(C.terminal_bg)
+  local font = self:get_font()
   local row_h = self:get_row_height()
-  local font = style.code_font
-  local char_w = font:get_width("M")
-  local vis_rows = math.max(1, math.floor(self.size.y / row_h))
-  local total = #self.lines
-  self.view_y = common.clamp(self.view_y, 0, math.max(0, total - 1))
-  local last = total - self.view_y
-  local first = math.max(1, last - vis_rows + 1)
-  local ox, oy = self:get_content_offset()
-  -- pixel-align like DocView does: fractional origins blur glyphs
-  -- (subpixel fringes) on LCD screens
-  ox, oy = common.round(ox), common.round(oy)
+  local char_w = self:get_char_width()
+  local cell_w = math.ceil(char_w)
+  local first, last = self:get_view_range()
+  local ox, oy = self:get_grid_origin()
+  local sel_color = C.selection or style.selection
   core.push_clip_rect(self.position.x, self.position.y, self.size.x, self.size.y)
-  local y = common.round(oy + self.size.y - (last - first + 1) * row_h)
+  local y = oy
   for i = first, last do
     local row = self.lines[i]
-    for c = 1, #row.ch do
+    local sel_from, sel_to = self:get_selection_span(i)
+    local maxc = #row.ch
+    if sel_to then maxc = math.max(maxc, math.min(sel_to, self.cols)) end
+    for c = 1, maxc do
       -- pixel-aligned columns: fractional advances blur glyphs
       -- progressively toward the end of the row
       local cx = common.round(ox + (c - 1) * char_w)
-      local fg = self:resolve_fg(row.fg[c], row.bold[c])
       local bg = row.bg[c]
       if bg then
-        renderer.draw_rect(cx, y, math.ceil(char_w), row_h, bg)
+        renderer.draw_rect(cx, y, cell_w, row_h, bg)
       end
-      if row.ch[c] ~= " " then
-        renderer.draw_text(font, row.ch[c], cx, y, fg)
+      if sel_from and c >= sel_from and c <= sel_to then
+        renderer.draw_rect(cx, y, cell_w, row_h, sel_color)
+      end
+      local ch = row.ch[c]
+      if ch and ch ~= " " then
+        renderer.draw_text(font, ch, cx, y, self:resolve_fg(row.fg[c], row.bold[c]))
       end
     end
-    -- cursor
-    if self.view_y == 0 and self.show_cursor and i == self.cy
+    -- cursor (only while following the tail, like a real terminal)
+    if self.view_top == nil and self.show_cursor and i == self.cy
         and core.active_view == self
+        and not self.mouse_selecting
         and not config.disable_blink
         and (core.blink_timer - core.blink_start) % config.blink_period < config.blink_period / 2 then
       local ccx = common.round(ox + (self.cx - 1) * char_w)
-      renderer.draw_rect(ccx, y, math.ceil(char_w), row_h, style.caret)
+      renderer.draw_rect(ccx, y, cell_w, row_h, style.caret)
       local rowc = self.lines[self.cy]
       local ch = rowc and rowc.ch[self.cx] or " "
       if ch ~= " " then
@@ -786,29 +1103,122 @@ function TerminalView:draw()
     y = y + row_h
   end
   core.pop_clip_rect()
+  self:draw_scrollbar()
 end
 
 function TerminalView:on_mouse_pressed(button, x, y, clicks)
   if button ~= "left" then return false end
-  return true
-end
-
-function TerminalView:on_mouse_wheel(y, x)
-  local row_h = self:get_row_height()
-  local vis_rows = math.max(1, math.floor(self.size.y / row_h))
-  local max_up = math.max(0, #self.lines - vis_rows)
-  if y ~= 0 then
-    self.view_y = common.clamp(self.view_y + y * 3, 0, max_up)
+  local r = self:get_scrollbar_rect()
+  if r and self:scrollbar_overlaps_point(x, y) then
+    local thumb = self:get_scrollbar_thumb()
+    local on_thumb = thumb and y >= thumb.y and y <= thumb.y + thumb.h
+      and x >= r.x - common.round(2 * SCALE)
+      and x <= r.x + r.w + common.round(2 * SCALE)
+    self.scrollbar_dragging = true
+    self.scrollbar_drag_offset = on_thumb and (y - thumb.y) or nil
+    if not on_thumb then self:scrollbar_drag_to(y) end
     core.redraw = true
     return true
   end
-  return false
+  local line, col = self:resolve_position(x, y)
+  if keymap.modkeys["shift"] and self.sel then
+    -- shift-click extends the current selection
+    self.sel[3], self.sel[4] = line, col
+    self.mouse_selecting = { line = line, col = col, snap = nil }
+  elseif clicks >= 3 then
+    self:select_line(line)
+    self.mouse_selecting = { line = line, col = col, snap = "lines" }
+  elseif clicks == 2 then
+    self:select_word(line, col)
+    self.mouse_selecting = { line = line, col = col, snap = "word" }
+  else
+    self.sel = { line, col, line, col }
+    self.mouse_selecting = { line = line, col = col, snap = nil }
+  end
+  core.redraw = true
+  return true
+end
+
+function TerminalView:on_mouse_moved(x, y, dx, dy)
+  local over_scrollbar = self:scrollbar_overlaps_point(x, y)
+  if self.scrollbar_hover ~= over_scrollbar then
+    self.scrollbar_hover = over_scrollbar
+    core.redraw = true
+  end
+  if self.scrollbar_dragging then
+    self:scrollbar_drag_to(y)
+    self.cursor = "arrow"
+    return
+  end
+  if self.mouse_selecting then
+    -- auto-scroll while dragging past the top/bottom edge of the grid
+    local _, top = self:get_grid_origin()
+    local row_h = self:get_row_height()
+    local grid_h = self:get_visible_rows() * row_h
+    if y < top then
+      self:scroll_by(math.ceil((top - y) / row_h))
+    elseif y > top + grid_h then
+      self:scroll_by(-math.ceil((y - top - grid_h) / row_h))
+    end
+    local line, col = self:resolve_position(x, y)
+    if self.mouse_selecting.snap == "lines" then
+      local a = self.mouse_selecting.line
+      local l1, l2 = math.min(a, line), math.max(a, line)
+      local to = 1
+      for l = l1, l2 do
+        to = math.max(to, #(self.lines[l] and self.lines[l].ch or 0))
+      end
+      self.sel = { l1, 1, l2, to }
+    else
+      self.sel[3], self.sel[4] = line, col
+    end
+    self.cursor = "ibeam"
+    core.redraw = true
+    return
+  end
+  self.cursor = over_scrollbar and "arrow" or "ibeam"
+end
+
+function TerminalView:on_mouse_released(button, x, y)
+  local snap = self.mouse_selecting and self.mouse_selecting.snap
+  self.mouse_selecting = nil
+  self.scrollbar_dragging = false
+  self.scrollbar_drag_offset = nil
+  -- a plain click (no drag, no word/line snap) just clears the selection
+  if not snap and self.sel then
+    local l1, c1, l2, c2 = sorted_selection(self.sel)
+    if l1 == l2 and c1 == c2 then self.sel = nil end
+  end
+  core.redraw = true
+end
+
+function TerminalView:on_mouse_left()
+  if self.scrollbar_hover then
+    self.scrollbar_hover = false
+    core.redraw = true
+  end
+end
+
+function TerminalView:on_mouse_wheel(y, x)
+  if y == 0 then return false end
+  local rows = config.plugins.terminal.scroll_wheel_rows or 3
+  self:scroll_by(y * rows)
+  return true
 end
 
 function TerminalView:on_text_input(text)
-  if self.pty and text ~= "" then
-    self.pty:write(text)
-  end
+  if text == "" then return end
+  self:clear_selection()
+  self:scroll_to_bottom()
+  if self.pty then self.pty:write(text) end
+end
+
+-- Send a key sequence to the shell, leaving scrollback/selection mode first.
+function TerminalView:send_key(data)
+  self:clear_selection()
+  self:scroll_to_bottom()
+  if self.pty then self.pty:write(data) end
+  core.redraw = true
 end
 
 -- Placement: bottom tab next to the console ------------------------------------
@@ -869,26 +1279,33 @@ command.add(nil, {
 })
 
 command.add(TerminalView, {
-  ["terminal:send-return"] = function(v) if v.pty then v.pty:write("\r") end end,
-  ["terminal:send-backspace"] = function(v) if v.pty then v.pty:write("\127") end end,
-  ["terminal:send-tab"] = function(v) if v.pty then v.pty:write("\t") end end,
-  ["terminal:send-escape"] = function(v) if v.pty then v.pty:write("\27") end end,
-  ["terminal:send-up"] = function(v) if v.pty then v.pty:write("\27[A") end end,
-  ["terminal:send-down"] = function(v) if v.pty then v.pty:write("\27[B") end end,
-  ["terminal:send-right"] = function(v) if v.pty then v.pty:write("\27[C") end end,
-  ["terminal:send-left"] = function(v) if v.pty then v.pty:write("\27[D") end end,
-  ["terminal:send-home"] = function(v) if v.pty then v.pty:write("\27[H") end end,
-  ["terminal:send-end"] = function(v) if v.pty then v.pty:write("\27[F") end end,
-  ["terminal:send-escape"] = function(v) if v.pty then v.pty:write("\27") end end,
-  ["terminal:send-pageup"] = function(v) if v.pty then v.pty:write("\27[5~") end end,
-  ["terminal:send-pagedown"] = function(v) if v.pty then v.pty:write("\27[6~") end end,
-  ["terminal:send-delete"] = function(v) if v.pty then v.pty:write("\27[3~") end end,
-  ["terminal:send-interrupt"] = function(v) if v.pty then v.pty:write("\3") end end,
-  ["terminal:send-eof"] = function(v) if v.pty then v.pty:write("\4") end end,
+  ["terminal:send-return"] = function(v) v:send_key("\r") end,
+  ["terminal:send-backspace"] = function(v) v:send_key("\127") end,
+  ["terminal:send-tab"] = function(v) v:send_key("\t") end,
+  ["terminal:send-escape"] = function(v) v:send_key("\27") end,
+  ["terminal:send-up"] = function(v) v:send_key("\27[A") end,
+  ["terminal:send-down"] = function(v) v:send_key("\27[B") end,
+  ["terminal:send-right"] = function(v) v:send_key("\27[C") end,
+  ["terminal:send-left"] = function(v) v:send_key("\27[D") end,
+  ["terminal:send-home"] = function(v) v:send_key("\27[H") end,
+  ["terminal:send-end"] = function(v) v:send_key("\27[F") end,
+  ["terminal:send-pageup"] = function(v) v:send_key("\27[5~") end,
+  ["terminal:send-pagedown"] = function(v) v:send_key("\27[6~") end,
+  ["terminal:send-delete"] = function(v) v:send_key("\27[3~") end,
+  ["terminal:send-interrupt"] = function(v) v:send_key("\3") end,
+  ["terminal:send-eof"] = function(v) v:send_key("\4") end,
   ["terminal:paste"] = function(v)
     local text = system.get_clipboard()
-    if v.pty and text and text ~= "" then v.pty:write(text) end
+    if text and text ~= "" then v:send_key(text) end
   end,
+  ["terminal:copy"] = function(v) v:copy_selection() end,
+  ["terminal:select-all"] = function(v) v:select_all() end,
+  ["terminal:scroll-up"] = function(v) return v:scroll_by(1) end,
+  ["terminal:scroll-down"] = function(v) return v:scroll_by(-1) end,
+  ["terminal:scroll-page-up"] = function(v) return v:scroll_by(v:get_visible_rows()) end,
+  ["terminal:scroll-page-down"] = function(v) return v:scroll_by(-v:get_visible_rows()) end,
+  ["terminal:scroll-to-top"] = function(v) v:set_view_top(1) end,
+  ["terminal:scroll-to-bottom"] = function(v) v:scroll_to_bottom() end,
 })
 
 keymap.add {
@@ -909,6 +1326,13 @@ keymap.add {
   ["ctrl+c"] = "terminal:send-interrupt",
   ["ctrl+d"] = "terminal:send-eof",
   ["ctrl+v"] = "terminal:paste",
+  -- selection and scrollback
+  ["ctrl+shift+c"] = "terminal:copy",
+  ["ctrl+shift+a"] = "terminal:select-all",
+  ["shift+pageup"] = "terminal:scroll-page-up",
+  ["shift+pagedown"] = "terminal:scroll-page-down",
+  ["ctrl+shift+home"] = "terminal:scroll-to-top",
+  ["ctrl+shift+end"] = "terminal:scroll-to-bottom",
 }
 
 -- Register the terminal button on the activity bar (panel selector).

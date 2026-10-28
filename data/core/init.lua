@@ -204,6 +204,29 @@ style.icon_font = renderer.font.load(DATADIR .. "/fonts/icons.ttf", 16 * SCALE,
   { antialiasing = "grayscale", hinting = "full" })
 style.icon_big_font = style.icon_font:copy(23 * SCALE)
 
+------------------------------ Terminal ---------------------------------------
+
+-- The embedded terminal (plugins/terminal.lua) uses style.code_font by
+-- default. To give it its own font, set `font` to a monospace TTF path (or
+-- to a renderer.font object) and a size in pixels (NOT points, unlike GTK
+-- terminals -- `fc-match Monospace` tells you which file a family resolves to):
+--
+--   config.plugins.terminal.font = "/usr/share/fonts/noto/NotoSansMono-Regular.ttf"
+--   config.plugins.terminal.font_size = 14
+--   config.plugins.terminal.font_options = { antialiasing = "grayscale", hinting = "full" }
+--
+-- Inner margin between the view borders and the text (SCALE units):
+--   config.plugins.terminal.padding = { x = 10, y = 8 }
+--
+-- How much scrollback history to keep (rows):
+--   config.plugins.terminal.scrollback = 1000
+--
+-- Selection/scrollback:
+--   drag to select, double click = word, triple click = line, shift+click
+--   extends the selection; Ctrl+Shift+C copies and Ctrl+Shift+A selects all.
+--   Wheel scrolls the history, Shift+PageUp/PageDown scrolls a page and
+--   Ctrl+Shift+Home/End jumps to the top/bottom. Typing returns to the tail.
+
 ------------------------------ Plugins ----------------------------------------
 
 -- disable plugin loading setting config entries:
