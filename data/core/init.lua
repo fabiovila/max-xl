@@ -237,6 +237,48 @@ style.icon_big_font = style.icon_font:copy(23 * SCALE)
 --   Wheel scrolls the history, Shift+PageUp/PageDown scrolls a page and
 --   Ctrl+Shift+Home/End jumps to the top/bottom. Typing returns to the tail.
 
+------------------------------- Debugging -------------------------------------
+
+-- The GDB frontend (plugins/gdb.lua + plugins/gdbui.lua) talks MI2 to GDB
+-- and reads launch configurations from this table or from
+-- <project>/.max-xl/debug.lua (the project file wins). Strings support
+-- ${workspace}, ${file}, ${fileDir}, ${fileBasename}, ${env:NAME}, ...
+--
+-- config.plugins.gdb.configs = {
+--   { name = "local", program = "${workspace}/build/app", args = { "--verbose" } },
+--   {
+--     -- Linux ARM via gdbserver / QEMU (gdbserver :1234 ./app-arm)
+--     name = "arm remote",
+--     gdb = "arm-none-eabi-gdb",        -- or "gdb-multiarch"
+--     program = "${workspace}/build/app-arm",
+--     target = "localhost:1234",
+--     target_type = "remote",           -- "extended-remote" for OpenOCD
+--     architecture = "arm",
+--   },
+--   {
+--     -- bare metal with ST-Link; OpenOCD starts and stops with the session
+--     name = "stm32 bare metal",
+--     gdb = "arm-none-eabi-gdb",
+--     program = "${workspace}/build/firmware.elf",
+--     target = "localhost:3333",
+--     target_type = "extended-remote",
+--     pre_launch = "openocd -f board/st_nucleo_f4.cfg",
+--     init_commands = { "monitor reset halt" },
+--     stop_at_entry = true,
+--   },
+-- }
+--
+-- GDB binary used when a configuration does not set its own:
+--   config.plugins.gdb.gdb = "gdb"
+--
+-- Breakpoints: click the gutter or press F9; conditions and "run to cursor"
+-- are in the editor context menu. They are stored per project in
+-- USERDIR/gdb-breakpoints.lua.
+--
+-- Keys: F5 start/continue, Shift+F5 stop, Ctrl+Shift+F5 restart, F6 pause,
+-- F9 breakpoint, F10/F11/Shift+F11 step over/into/out, Ctrl+F10 run to
+-- cursor, Ctrl+Shift+Y debug console, Ctrl+Alt+D Run and Debug panel.
+
 ------------------------------ Plugins ----------------------------------------
 
 -- disable plugin loading setting config entries:

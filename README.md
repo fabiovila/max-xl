@@ -126,6 +126,93 @@ on the right edge), `Shift+PageUp`/`Shift+PageDown` scrolls a page,
 `Ctrl+Shift+Home`/`Ctrl+Shift+End` jumps to the top/bottom, and typing returns
 to the live prompt.
 
+### Debugging (GDB)
+
+`plugins/gdb.lua` drives GDB through its machine interface (MI2) over pipes,
+so there is no DAP server or Python glue involved. `plugins/gdbui.lua` draws
+the VS Code-style frontend: a **Run and Debug** panel in the sidebar (launch
+configuration, breakpoints, call stack, expandable locals, threads and
+registers), a floating toolbar over the editor, a GDB console at the bottom,
+clickable breakpoint gutter, the stopped-line highlight and automatic source
+navigation. Everything is ARM friendly (`arm-none-eabi-gdb`, `gdb-multiarch`,
+AArch64, Cortex-M, …) and any `gdb` binary can be selected per configuration.
+
+Launch configurations are plain Lua tables. They are read from
+`config.plugins.gdb.configs` in `~/.config/max-xl/init.lua` and from
+`<project>/.max-xl/debug.lua` (the project file wins):
+
+```lua
+-- <project>/.max-xl/debug.lua -- return one or more configurations
+return {
+  {
+    name = "local",
+    program = "${workspace}/build/app",
+    args = { "--verbose" },
+  },
+  {
+    -- Linux ARM board over gdbserver / QEMU user mode
+    name = "arm remote",
+    gdb = "arm-none-eabi-gdb",         -- or gdb-multiarch
+    program = "${workspace}/build/app-arm",
+    target = "localhost:1234",         -- gdbserver :1234 ./app-arm
+    target_type = "remote",            -- "extended-remote" for OpenOCD
+    architecture = "arm",
+  },
+  {
+    -- bare metal with ST-Link + OpenOCD, started together with the session
+    name = "stm32 bare metal",
+    gdb = "arm-none-eabi-gdb",
+    program = "${workspace}/build/firmware.elf",
+    target = "localhost:3333",
+    target_type = "extended-remote",
+    pre_launch = "openocd -f board/st_nucleo_f4.cfg",
+    pre_launch_delay = 1.0,
+    init_commands = { "monitor reset halt" },
+    stop_at_entry = true,
+  },
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `name` | Configuration name shown in the picker and panel. |
+| `program` | Executable/ELF with debug symbols (optional for attach). |
+| `args`, `cwd`, `env` | Command line arguments, working directory, extra environment variables. |
+| `gdb`, `gdb_args` | GDB binary (default: `config.plugins.gdb.gdb`) and extra arguments. |
+| `architecture` | `set architecture …` (e.g. `arm`, `aarch64`, `armv7e-m`). |
+| `target`, `target_type` | Remote target (`host:port`) and `remote`/`extended-remote`. |
+| `attach_pid` | Attach to a running process instead of launching. |
+| `init_commands` | CLI commands run after loading the program. |
+| `pre_launch`, `pre_launch_delay` | Command started before GDB (OpenOCD, QEMU, gdbserver wrapper); killed on stop. |
+| `stop_at_entry` | Stop at `main`/entry instead of running (`--start`). |
+| `run_command` | Raw MI command used to start/continue the target. |
+
+Strings support `${workspace}`, `${file}`, `${fileDir}`, `${fileBasename}`,
+`${fileBasenameNoExt}`, `${fileExtname}` and `${env:NAME}`.
+
+Breakpoints can be toggled by clicking the gutter or pressing `F9`; the
+context menu also offers conditional breakpoints and *Run to Cursor*. Enabled
+breakpoints are stored per project in `USERDIR/gdb-breakpoints.lua`, so they
+survive restarts and are re-inserted on the next session.
+
+| Key | Action |
+| --- | --- |
+| `F5` | Start / continue |
+| `Shift+F5` | Stop the session |
+| `Ctrl+Shift+F5` | Restart |
+| `F6` | Pause |
+| `F9` | Toggle breakpoint |
+| `F10` / `F11` / `Shift+F11` | Step over / into / out |
+| `Ctrl+F10` | Run to cursor |
+| `Ctrl+Shift+Y` | Toggle the GDB console |
+| `Ctrl+Alt+D` | Toggle the Run and Debug panel |
+
+The console accepts GDB commands (type `help`, `info registers`, `p expr`, …).
+When no session is active, `F5` keeps its previous meaning (`project-search:refresh`).
+UI knobs live under `config.plugins.gdb` / `config.plugins.gdbui`:
+`show_registers`, `auto_open_source`, `stop_line_color`, `breakpoint_color`,
+`sidebar_size`, `console_height`.
+
 ## Quick Build Guide
 
 To compile Max XL yourself, you must have the following dependencies installed

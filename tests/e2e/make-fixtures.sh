@@ -28,3 +28,39 @@ printf 'line one\nline two changed\n' > f.txt
 printf 'new file\n' > u.txt
 mkdir -p "$FIX/lxtest2"
 git status --porcelain=v1 -uall
+
+# gdb fixtures --------------------------------------------------------------
+# Native program used by the GDB/MI session test.
+if command -v cc >/dev/null 2>&1; then
+  mkdir -p "$FIX/gdb"
+  cat > "$FIX/gdb/prog.c" <<'CEOF'
+#include <stdio.h>
+
+int add(int a, int b) {
+  int s = a + b;
+  return s;
+}
+
+int main(void) {
+  printf("%d\n", add(2, 3));
+  return 0;
+}
+CEOF
+  cc -g -O0 -o "$FIX/gdb/prog" "$FIX/gdb/prog.c"
+fi
+
+# ARM freestanding program used by the remote (QEMU gdbstub) test.
+if command -v arm-none-eabi-gcc >/dev/null 2>&1; then
+  mkdir -p "$FIX/gdbarm"
+  cat > "$FIX/gdbarm/prog.c" <<'CEOF'
+volatile int counter = 0;
+
+void _start(void)
+{
+  for (;;) {
+    counter = counter + 1;
+  }
+}
+CEOF
+  arm-none-eabi-gcc -nostdlib -g -O0 -o "$FIX/gdbarm/prog" "$FIX/gdbarm/prog.c"
+fi

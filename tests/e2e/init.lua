@@ -830,6 +830,130 @@ return {
       log("terminal follow-tail ok")
     end
 
+    -- GDB integration ------------------------------------------------------
+    do
+      local gdb = require "plugins.gdb"
+      local _, kind, rec = gdb.parse_record(
+        '7^done,bkpt={number="1",file="prog.c",line="4",thread-groups=["i1"]}')
+      assert(kind == "^" and rec.class == "done", "mi record parse failed")
+      assert(rec.bkpt.line == "4", "mi bkpt parse failed")
+      assert(rec.bkpt["thread-groups"][1] == "i1", "mi list parse failed")
+      -- regression: nested lists (library-loaded ranges) used to loop forever
+      local t0 = system.get_time()
+      local _, _, loaded = gdb.parse_record(
+        '=library-loaded,id="x",ranges=[{from="0x1",to="0x2"}]')
+      assert(loaded.ranges[1].from == "0x1", "nested mi list parse failed")
+      assert(system.get_time() - t0 < 1, "mi parser too slow")
+      log("gdb parser ok")
+
+      -- panel + console open/close through the real commands
+      command.perform("debug:show-panel")
+      assert(gdb.ui.panel.visible, "debug panel did not open")
+      command.perform("debug:show-console")
+      assert(gdb.ui.console:is_open(), "debug console did not open")
+      command.perform("debug:toggle-console")
+      assert(not gdb.ui.console:is_open(), "debug console did not close")
+      command.perform("debug:toggle-panel")
+      assert(not gdb.ui.panel.visible, "debug panel did not close")
+      log("gdb ui ok")
+
+      local function have(name)
+        for d in (os.getenv("PATH") or ""):gmatch("[^:]+") do
+          if system.get_file_info(d .. "/" .. name) then return d .. "/" .. name end
+        end
+      end
+      local function wait_until(fn, timeout)
+        local deadline = system.get_time() + timeout
+        while not fn() do
+          if system.get_time() > deadline then return false end
+          coroutine.yield(0.05)
+        end
+        return true
+      end
+
+      local dir1 = os.getenv("E2E_GDB")
+      if dir1 and have("gdb") and system.get_file_info(dir1 .. "/prog") then
+        local src = dir1 .. "/prog.c"
+        local gdb_config = require("core.config").plugins.gdb
+        gdb.load_project_breakpoints()
+        gdb.toggle_breakpoint(src, 4)
+        assert(gdb.breakpoint_at(src, 4), "breakpoint not stored")
+        assert(system.get_file_info(USERDIR .. "/" .. gdb_config.breakpoint_file),
+          "breakpoint store not written")
+        gdb.toggle_breakpoint(src, 4)
+        assert(not gdb.breakpoint_at(src, 4), "breakpoint not removed")
+        log("gdb breakpoints ok")
+
+        gdb.toggle_breakpoint(src, 4)
+        gdb.start({ name = "e2e", program = dir1 .. "/prog", cwd = dir1 })
+        assert(wait_until(function()
+          return gdb.state == "paused" and gdb.session
+            and gdb.session.current and gdb.session.current.line == 4
+        end, 25), "gdb session did not stop: " .. gdb.state)
+        local s = gdb.session
+        assert(s.current.file == src, "gdb stopped in the wrong file")
+        assert(wait_until(function()
+          return #(s.frames or {}) >= 2 and #(s.variables or {}) >= 2
+        end, 10), "gdb frames/variables not loaded")
+        assert(s.frames[1].func == "add", "gdb top frame is not add")
+        assert(s.frames[2].func == "main", "gdb caller frame is not main")
+        local vars = {}
+        for _, v in ipairs(s.variables) do vars[v.name] = v end
+        assert(vars.a and vars.b, "gdb args not listed")
+        assert(wait_until(function() return #(s.registers or {}) > 0 end, 10),
+          "gdb registers not listed")
+        gdb.step_over()
+        assert(wait_until(function()
+          return s.current and s.current.line == 5
+        end, 10), "gdb step over failed")
+        gdb.continue()
+        assert(wait_until(function() return gdb.state == "exited" end, 10),
+          "gdb inferior did not exit")
+        gdb.stop()
+        assert(wait_until(function() return gdb.session == nil end, 5),
+          "gdb session not stopped")
+        gdb.toggle_breakpoint(src, 4)
+        log("gdb session ok")
+      else
+        log("gdb session skipped (no gdb/cc)")
+      end
+
+      local dir2 = os.getenv("E2E_GDBARM")
+      if dir2 and have("arm-none-eabi-gdb") and have("qemu-arm")
+          and system.get_file_info(dir2 .. "/prog") then
+        local src = dir2 .. "/prog.c"
+        gdb.toggle_breakpoint(src, 6)
+        gdb.start({
+          name = "arm-e2e",
+          gdb = "arm-none-eabi-gdb",
+          program = dir2 .. "/prog",
+          cwd = dir2,
+          target = "localhost:31234",
+          target_type = "remote",
+          pre_launch = have("qemu-arm") .. " -g 31234 " .. dir2 .. "/prog",
+          pre_launch_delay = 0.6,
+          architecture = "arm",
+        })
+        assert(wait_until(function()
+          return gdb.state == "paused" and gdb.session and gdb.session.current
+            and gdb.session.current.line == 6
+        end, 30), "arm session did not hit the breakpoint: " .. gdb.state)
+        local s = gdb.session
+        assert(wait_until(function() return #(s.registers or {}) > 0 end, 10),
+          "arm registers not listed")
+        local regs = {}
+        for _, r in ipairs(s.registers) do regs[r.name] = r.value end
+        assert(regs.pc and regs.sp, "arm registers missing pc/sp")
+        gdb.stop()
+        assert(wait_until(function() return gdb.session == nil end, 8),
+          "arm session not stopped")
+        gdb.toggle_breakpoint(src, 6)
+        log("gdb arm remote ok")
+      else
+        log("gdb arm remote skipped (no arm gdb/qemu)")
+      end
+    end
+
     panel:hide(true)
     assert(not panel.visible, "panel still visible")
     log("ALL E2E PASS")
