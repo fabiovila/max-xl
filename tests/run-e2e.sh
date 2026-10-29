@@ -21,6 +21,9 @@ fi
 TDIR=$(mkdir -p /tmp/opencode && mktemp -d /tmp/opencode/e2e-XXXXXX)
 export E2E_FIX="$TDIR/fix" E2E_LOG="$TDIR/e2e.log" E2E_MARKER="$TDIR/fix/maxxl-marker.log"
 export E2E_GDB="$TDIR/fix/gdb" E2E_GDBARM="$TDIR/fix/gdbarm"
+export E2E_LSP_JSON="$(pwd)/data/plugins/lsp/json.lua"
+export E2E_LSP_SCRIPT="$(pwd)/tests/e2e/mock-lsp.lua"
+export E2E_LSP_LOG="$TDIR/lsp.log"
 export HOME="$TDIR/home" LITE_USERDIR="$TDIR/user"
 
 "$(pwd)/tests/e2e/make-fixtures.sh" "$E2E_FIX"

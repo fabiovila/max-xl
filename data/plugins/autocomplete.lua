@@ -134,6 +134,11 @@ autocomplete.map = {}
 autocomplete.map_manually = {}
 autocomplete.on_close = nil
 autocomplete.icons = {}
+---Async completion providers. Each entry is a function called with
+---`(doc, partial, generation)`. Results are delivered with
+---`autocomplete.provide(name, generation, items, doc)`.
+---@type fun(doc: core.doc, partial: string, generation: integer)[]
+autocomplete.providers = {}
 
 -- Flag that indicates if the autocomplete box was manually triggered
 -- with the autocomplete.complete() function to prevent the suggestions
@@ -287,6 +292,12 @@ local suggestions_idx = 1
 local suggestions = {}
 local last_line, last_col
 
+-- Async provider state: results are keyed by provider name and tied to the
+-- document they were requested for.
+local provider_generation = 0
+---@type table<string, { doc: core.doc?, items: table[] }>
+local provider_items = {}
+
 
 local function reset_suggestions()
   suggestions_offset = 1
@@ -319,6 +330,16 @@ local function update_suggestions()
   for _, v in pairs(map) do
     if common.match_pattern(filename, v.files) then
       for _, item in pairs(v.items) do
+        table.insert(items, item)
+        assigned_sym[item.text] = true
+      end
+    end
+  end
+
+  -- Items delivered asynchronously by providers (e.g. LSP completion)
+  for _, entry in pairs(provider_items) do
+    if entry.doc == doc then
+      for _, item in ipairs(entry.items) do
         table.insert(items, item)
         assigned_sym[item.text] = true
       end
@@ -384,6 +405,16 @@ end
 local function get_active_view()
   if core.active_view:is(DocView) then
     return core.active_view
+  end
+end
+
+---Ask every registered provider for suggestions. `provider_generation` makes
+---late answers from previous keystrokes easy to discard.
+local function run_providers(doc)
+  if not doc or #autocomplete.providers == 0 then return end
+  provider_generation = provider_generation + 1
+  for _, provider in ipairs(autocomplete.providers) do
+    provider(doc, partial, provider_generation)
   end
 end
 
@@ -683,6 +714,7 @@ local function show_autocomplete()
     partial = get_partial_symbol()
 
     if #partial >= config.plugins.autocomplete.min_len or triggered_manually then
+      run_providers(av.doc)
       update_suggestions()
 
       if not triggered_manually then
@@ -777,6 +809,7 @@ function autocomplete.open(on_close)
   if av then
     partial = get_partial_symbol()
     last_line, last_col = av.doc:get_selection()
+    run_providers(av.doc)
     update_suggestions()
   end
 end
@@ -803,6 +836,42 @@ function autocomplete.can_complete()
     return true
   end
   return false
+end
+
+---Register an asynchronous completion provider.
+---The provider is called on every refresh with `(doc, partial, generation)`;
+---it should call `autocomplete.provide(name, generation, items, doc)` when its
+---results arrive. `items` is a list of `autocomplete.item()` tables.
+---@param provider fun(doc: core.doc, partial: string, generation: integer)
+function autocomplete.add_provider(provider)
+  table.insert(autocomplete.providers, provider)
+end
+
+---Create a completion item for a provider.
+---@param text string
+---@param info? string
+function autocomplete.item(text, info)
+  return setmetatable({ text = text, info = info }, mt)
+end
+
+---Deliver provider results. Answers for an outdated generation (the user kept
+---typing) are discarded.
+---@param name string
+---@param generation integer
+---@param items table[]
+---@param doc? core.doc document the items belong to
+function autocomplete.provide(name, generation, items, doc)
+  if generation ~= provider_generation then return end
+  local av = get_active_view()
+  doc = doc or (av and av.doc)
+  provider_items[name] = { doc = doc, items = items or {} }
+  if not av or av.doc ~= doc then return end
+  partial = get_partial_symbol()
+  if #partial >= config.plugins.autocomplete.min_len or triggered_manually then
+    update_suggestions()
+    last_line, last_col = av.doc:get_selection()
+    core.redraw = true
+  end
 end
 
 ---Register a font icon that can be assigned to completion items.

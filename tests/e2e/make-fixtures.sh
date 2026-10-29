@@ -76,3 +76,15 @@ void _start(void)
 CEOF
   arm-none-eabi-gcc -nostdlib -g -O0 -o "$FIX/gdbarm/prog" "$FIX/gdbarm/prog.c"
 fi
+
+# LSP fixtures ---------------------------------------------------------------
+# Root marker + a small C file driven by tests/e2e/mock-lsp.lua.
+mkdir -p "$FIX/lsp"
+printf '[]\n' > "$FIX/lsp/compile_commands.json"
+cat > "$FIX/lsp/sample.c" <<'CEOF'
+int foo(void) {
+  int boom = 0;
+  return boom;
+}
+CEOF
+

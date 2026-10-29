@@ -255,6 +255,30 @@ style.icon_big_font = style.icon_font:copy(23 * SCALE)
 --
 -- Keys: F7 build, Shift+F7 pick a task, F8/Shift+F8 next/previous problem.
 
+---------------------------- Language servers --------------------------------
+
+-- plugins/lsp.lua runs a language server (clangd by default) per project and
+-- feeds diagnostics into the Problems panel. It also provides completion,
+-- hover, go-to-definition/references, document symbols, rename and format.
+--
+-- config.plugins.lsp = {
+--   auto_start = true,       -- start on open (F12 etc. start it on demand)
+--   auto_complete = true,
+--   change_delay = 0.25,     -- seconds of idle before sending edits
+--   log_stderr = false,
+--   servers = {
+--     clangd = { command = { "clangd", "--background-index", "--clang-tidy" } },
+--     -- clangd = false,      -- disable the built-in server
+--   },
+-- }
+--
+-- Generate compile_commands.json (cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-- or `bear -- make`) so clangd knows the project's flags.
+--
+-- Keys: F12 definition, Shift+F12 references, Ctrl+Shift+H hover,
+-- Ctrl+Space completion, Ctrl+Alt+O document symbols, F2 rename,
+-- Alt+Shift+F format. Commands live under lsp:* (start/stop/restart/...).
+
 ------------------------------- Debugging -------------------------------------
 
 -- The GDB frontend (plugins/gdb.lua + plugins/gdbui.lua) talks MI2 to GDB

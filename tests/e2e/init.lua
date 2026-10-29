@@ -8,6 +8,25 @@ local core = require "core"
 local command = require "core.command"
 local style = require "core.style"
 
+-- The LSP tests start the mock server explicitly; keep real servers (clangd)
+-- out of the way for every other check.
+do
+  local config = require "core.config"
+  local script = os.getenv("E2E_LSP_SCRIPT")
+  config.plugins.lsp = {
+    auto_start = false,
+    servers = {
+      clangd = false,
+      mock = script and {
+        command = { "lua5.4", script },
+        files = { "%.c$" },
+        language = { c = "c" },
+        root_markers = { "compile_commands.json" },
+      } or false,
+    },
+  }
+end
+
 local FIX = os.getenv("E2E_FIX") or "/tmp/opencode"
 local LOGPATH = os.getenv("E2E_LOG") or (FIX .. "/e2e.log")
 local MARKER = FIX .. "/maxxl-marker.log"
@@ -953,6 +972,195 @@ return {
       end
     end
 
+    -- LSP client ------------------------------------------------------------
+    do
+      local lsp = require "plugins.lsp"
+      local json = require "plugins.lsp.json"
+      local problems = require "plugins.problems"
+
+      -- JSON round-trip (nested tables, escapes, surrogate pairs, null)
+      local decoded = assert(json.decode([[
+{"name":"a\u00e9\ud83d\ude00","list":[1,2.5,-3e2,true,false,null],"nested":{"x":"y\n\"z\""}}
+]]))
+      assert(decoded.name == "aé😀", "json unicode decode failed")
+      assert(decoded.list[1] == 1 and decoded.list[2] == 2.5 and decoded.list[3] == -300,
+        "json number decode failed")
+      assert(decoded.list[4] == true and decoded.list[5] == false and decoded.list[6] == json.null,
+        "json literals decode failed")
+      local round = assert(json.decode(json.encode(decoded)))
+      assert(round.name == decoded.name and round.nested.x == decoded.nested.x,
+        "json round-trip failed")
+      assert(json.encode({}) == "{}", "empty object encoding")
+      assert(json.encode(json.array()) == "[]", "empty array encoding")
+      local bad, err = json.decode("{nope")
+      assert(bad == nil and type(err) == "string", "invalid json accepted")
+      log("lsp json ok")
+
+      -- URI and UTF-16 position conversion
+      local uri = lsp.uri_from_path("/tmp/a b/ç.c")
+      assert(uri:find("a%20b", 1, true) and uri:find("%C3%A7", 1, true),
+        "uri encoding failed: " .. uri)
+      assert(lsp.path_from_uri(uri) == "/tmp/a b/ç.c", "uri decoding failed")
+      assert(lsp.col_to_utf16("açb", 4) == 2, "utf16 column conversion failed")
+      assert(lsp.utf16_to_col("açb", 2) == 4, "utf16 byte conversion failed")
+      assert(lsp.col_to_utf16("a😀b", 6) == 3, "utf16 surrogate width failed")
+      assert(lsp.utf16_to_col("a😀b", 3) == 6, "utf16 surrogate column failed")
+      assert(lsp.utf16_to_col("a😀b", 2) == 2, "utf16 mid-surrogate failed")
+      log("lsp uri/utf16 ok")
+
+      local script = os.getenv("E2E_LSP_SCRIPT")
+      local logpath = os.getenv("E2E_LSP_LOG")
+      local sample_path = FIX .. "/lsp/sample.c"
+      local lua54
+      for d in (os.getenv("PATH") or ""):gmatch("[^:]+") do
+        if system.get_file_info(d .. "/lua5.4") then lua54 = d .. "/lua5.4" break end
+      end
+      if not (script and lua54 and system.get_file_info(script)
+          and system.get_file_info(sample_path)) then
+        log("lsp mock skipped (no lua5.4/script)")
+      else
+        local session
+        local function read_lsp_log()
+          local fp = io.open(logpath or "", "r")
+          if not fp then return "" end
+          local text = fp:read("*a")
+          fp:close()
+          return text or ""
+        end
+        local function wait_lsp(cond, what, timeout)
+          local deadline = system.get_time() + (timeout or 20)
+          while not cond() do
+            if system.get_time() > deadline then
+              error("lsp timeout waiting for " .. what .. " (" .. tostring(session.state) .. ")")
+            end
+            coroutine.yield(0.05)
+          end
+        end
+        local function lsp_items()
+          local items = {}
+          for _, d in ipairs(problems.get()) do
+            if d.source and d.source:find("^lsp:mock:") then
+              table.insert(items, d)
+            end
+          end
+          return items
+        end
+
+        local sample = core.open_doc(sample_path)
+        local dv = core.root_view:open_doc(sample)
+        core.set_active_view(dv)
+        require("core.config").plugins.lsp.servers.mock.command = { lua54, script }
+        session = lsp.get_or_start(sample)
+        assert(session, "lsp session not created")
+        wait_lsp(function() return session.state == "ready" end, "initialize")
+        log("lsp initialize ok")
+
+        local sample_uri = lsp.uri_from_path(sample_path)
+        wait_lsp(function()
+          return read_lsp_log():find("didOpen " .. sample_uri, 1, true) ~= nil
+        end, "didOpen")
+        log("lsp didOpen ok")
+
+        -- diagnostics from the server land in the Problems registry
+        wait_lsp(function() return #lsp_items() > 0 end, "diagnostics")
+        local diag = lsp_items()[1]
+        assert(diag.file == sample_path and diag.line == 2 and diag.severity == "error",
+          string.format("unexpected diagnostic shape: %s:%s %s",
+            tostring(diag.file), tostring(diag.line), tostring(diag.severity)))
+        assert(diag.message:find("boom", 1, true), "diagnostic message missing")
+        local errors = 0
+        for _, item in ipairs(session.diags[sample_uri] or {}) do
+          if item.severity == "error" then errors = errors + 1 end
+        end
+        assert(errors >= 1, "session diagnostics not stored")
+        log("lsp diagnostics ok")
+
+        -- completion items are mapped to autocomplete entries
+        local completed
+        assert(lsp.completions(sample, function(items) completed = items end),
+          "completion request not started")
+        wait_lsp(function() return completed ~= nil end, "completion")
+        local by_text = {}
+        for _, item in ipairs(completed) do by_text[item.text] = item end
+        assert(by_text.mock_alpha and by_text.mock_beta and by_text.foo,
+          "completion items missing")
+        assert(by_text.mock_alpha.info == "mock function", "completion detail missing")
+        log("lsp completion ok")
+
+        -- hover popup
+        lsp.ui.hover.visible = false
+        sample:set_selection(1, 5)
+        lsp.hover()
+        wait_lsp(function() return lsp.ui.hover.visible end, "hover")
+        local hover_text = table.concat(lsp.ui.hover.lines, "\n")
+        assert(hover_text:find("mock hover", 1, true), "hover content wrong: " .. hover_text)
+        assert(not hover_text:find("**", 1, true), "hover markup not sanitized")
+        lsp.ui.hover.visible = false
+        log("lsp hover ok")
+
+        -- go to definition (mock points at line 3)
+        sample:set_selection(1, 5)
+        lsp.goto_definition()
+        wait_lsp(function() return sample:get_selection() == 3 end, "definition")
+        log("lsp definition ok")
+
+        -- references / symbols open the command view picker
+        lsp.references()
+        wait_lsp(function() return core.active_view == core.command_view end, "references picker")
+        assert(core.command_view.label:find("References", 1, true),
+          "references picker label")
+        command.perform("command:escape")
+        core.set_active_view(dv)
+        lsp.symbols()
+        wait_lsp(function() return core.active_view == core.command_view end, "symbols picker")
+        assert(core.command_view.label:find("Go to Symbol", 1, true), "symbols picker label")
+        command.perform("command:escape")
+        core.set_active_view(dv)
+        log("lsp pickers ok")
+
+        -- rename through the prompt + workspace edit
+        sample:set_selection(1, 5)
+        assert(command.perform("lsp:rename"), "rename command failed")
+        wait_lsp(function() return core.active_view == core.command_view end, "rename prompt")
+        core.command_view:set_text("renamed")
+        command.perform("command:submit")
+        wait_lsp(function() return sample.lines[1] == "int renamed(void) {\n" end, "rename edit")
+        log("lsp rename ok")
+
+        -- formatting replaces the whole document
+        core.set_active_view(dv)
+        lsp.format()
+        wait_lsp(function()
+          return table.concat(sample.lines, "") == "// formatted\nint foo(void) { return 0; }\n"
+        end, "format edit")
+        log("lsp format ok")
+
+        -- the edit is pushed with a range matching the previously sent text
+        session:flush_doc(sample)
+        wait_lsp(function()
+          return read_lsp_log():find("didChange " .. sample_uri, 1, true) ~= nil
+        end, "didChange")
+        wait_lsp(function() return #lsp_items() == 0 end, "diagnostics cleared")
+        log("lsp didChange ok")
+
+        assert(command.perform("doc:save"), "save failed")
+        wait_lsp(function()
+          return read_lsp_log():find("didSave " .. sample_uri, 1, true) ~= nil
+        end, "didSave")
+        log("lsp didSave ok")
+
+        lsp.on_close(sample)
+        wait_lsp(function()
+          return read_lsp_log():find("didClose " .. sample_uri, 1, true) ~= nil
+        end, "didClose")
+        lsp.stop()
+        assert(session.state == "stopped", "session did not stop")
+        assert(command.map["lsp:definition"] and command.map["lsp:rename"],
+          "lsp commands missing")
+        log("lsp didClose ok")
+      end
+    end
+
     -- GDB integration ------------------------------------------------------
     do
       local gdb = require "plugins.gdb"
@@ -1081,6 +1289,12 @@ return {
     assert(not panel.visible, "panel still visible")
     log("ALL E2E PASS")
   end)
-  if not ok then log("E2E FAIL: " .. tostring(err)) end
+  if not ok then
+    log("E2E FAIL: " .. tostring(err))
+    local applog = core.get_log() or ""
+    for line in applog:gmatch("[^\n]+") do
+      if line:find("%[ERROR%]") then log("APP " .. line) end
+    end
+  end
   os.exit(ok and 0 or 1)
 end)

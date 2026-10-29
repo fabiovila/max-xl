@@ -29,6 +29,9 @@ VS Code-style workflow:
   compiler output from build tasks.
 - **Build tasks** (`F7`) with GCC/Clang problem matching and `F8`/`Shift+F8`
   navigation between problems.
+- **Language servers** (`clangd` by default): diagnostics, completion, hover,
+  go-to-definition, references, document symbols, rename and formatting over
+  the Language Server Protocol.
 - **Integrated console** (`Ctrl+Alt+T`).
 - **Custom action buttons** in the status bar, configured from `actions.lua`
   (user-wide or per project); clicking one runs a shell command and streams its
@@ -168,6 +171,78 @@ it opens the problems — or reruns the build when there are none.
 
 `config.plugins.build.auto_open_problems = true` opens the panel when a build
 fails with diagnostics; `build:reload` re-reads the task files.
+
+### Language servers (LSP)
+
+`plugins/lsp.lua` is a small LSP client. It speaks JSON-RPC over stdio to a
+server process and starts one session per (server, project root). The default
+server is `clangd`, used for C, C++, Objective-C and CUDA files. The project
+root is the nearest ancestor containing `compile_commands.json`,
+`compile_flags.txt`, `.clangd`, `CMakeLists.txt`, `meson.build`, `Makefile`,
+`build/compile_commands.json` or `.git`.
+
+Features:
+
+- diagnostics published by the server appear in the **Problems** panel
+  (`Ctrl+Shift+M`) and in the status bar counter;
+- context-aware completions in the autocomplete box (as you type or on
+  `Ctrl+Space`), merged with buffer symbols;
+- go to definition, references, hover, document symbols, rename and document
+  formatting.
+
+| Key | Action |
+| --- | --- |
+| `F12` | Go to definition / declaration |
+| `Shift+F12` | List references (picker) |
+| `Ctrl+Shift+H` | Hover (type, signature, docs) |
+| `Ctrl+Space` | Completion |
+| `Ctrl+Alt+O` | Go to symbol in the document |
+| `F2` | Rename symbol |
+| `Alt+Shift+F` | Format document |
+
+Configuration (user `init.lua` or `<project>/.max-xl/init.lua`):
+
+```lua
+config.plugins.lsp = {
+  auto_start = true,      -- start a server when a matching file is opened
+  auto_complete = true,   -- ask for completions while typing
+  change_delay = 0.25,    -- idle seconds before pushing edits
+  log_stderr = false,     -- forward server stderr to the editor log
+  hover_max_width = 560,
+  hover_max_lines = 18,
+  servers = {
+    clangd = {
+      command = { "clangd", "--background-index", "--clang-tidy" },
+      -- optional: init_options = { ... }
+    },
+    -- Disable a built-in server:
+    -- clangd = false,
+    -- Add another language server:
+    -- mypy = {
+    --   command = { "mypy", "--lsp" },
+    --   files = { "%.py$" },
+    --   language = { py = "python" },
+    --   root_markers = { "pyproject.toml", "setup.cfg", ".git" },
+    -- },
+  },
+}
+```
+
+Each server entry accepts `command` (table or string), `files` (Lua patterns
+matched against the absolute path), `language` (extension → LSP `languageId`),
+`root_markers` and `init_options`. User entries override the built-in server
+with the same name; `false` removes it.
+
+For accurate C/C++ results, let `clangd` see the compiler flags: generate a
+`compile_commands.json` with `cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` or
+`bear -- make`, or write a `compile_flags.txt`. Without one, clangd still works
+with default flags.
+
+The client requests full-document synchronization and wraps each update in a
+whole-document edit when the server asks for incremental changes, so both
+sync modes are supported. Commands: `lsp:start`, `lsp:stop`, `lsp:restart`,
+`lsp:definition`, `lsp:references`, `lsp:hover`, `lsp:complete`, `lsp:symbols`,
+`lsp:format`, `lsp:rename`.
 
 ### Debugging (GDB)
 
